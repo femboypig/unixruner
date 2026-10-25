@@ -1,0 +1,52 @@
+name: unixruner
+options:
+  bundleIdPrefix: org.unixruner
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm.git
+    from: "1.0.7"
+
+targets:
+  unixruner:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Sources
+    dependencies:
+      - package: SwiftTerm
+    settings:
+      base:
+        PRODUCT_NAME: unixruner
+        PRODUCT_BUNDLE_IDENTIFIER: org.unixruner.app
+        INFOPLIST_FILE: Configuration/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Configuration/unixruner.entitlements
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        SWIFT_VERSION: "5.9"
+        ENABLE_BITCODE: NO
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+
+  unixrunerTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: unixruner
+    settings:
+      base:
+        PRODUCT_NAME: unixrunerTests
+        SWIFT_VERSION: "5.9"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
