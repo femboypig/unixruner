@@ -59,7 +59,7 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
         // Port forwarding
         let netdevArg = args.first(where: { $0.starts(with: "user,id=net0") })
         XCTAssertNotNil(netdevArg)
-        XCTAssertTrue(netdevArg!.contains("hostfwd=tcp:127.0.0.1:2222-:22"))
+        XCTAssertTrue(netdevArg!.contains("hostfwd=tcp::2222-:22"))
 
         // Kernel args
         XCTAssertTrue(args.contains("console=ttyAMA0 quiet"))
