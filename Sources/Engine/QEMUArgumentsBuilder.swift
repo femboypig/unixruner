@@ -1,4 +1,5 @@
 import Foundation
+
 public struct QEMUArgumentsBuilder {
     public static func build(
         config: VMConfig,
@@ -6,7 +7,7 @@ public struct QEMUArgumentsBuilder {
         kernelURL: URL?,
         initrdURL: URL?,
         sharedFolderURL: URL?,
-        ptyPath: String
+        socketPort: UInt16
     ) -> [String] {
         var args: [String] = []
 
@@ -25,24 +26,32 @@ public struct QEMUArgumentsBuilder {
         }
 
         // TCG JIT Accelerator tuning
-        // Setting tb-size to 128MB keeps JIT cache lean and prevents Jetsam kills
+        // Setting tb-size to 128MB keeps JIT cache lean and prevents Jetsam memory kills on iOS
         args.append(contentsOf: ["-accel", "tcg,tb-size=128"])
 
         // Hardware allocation
         args.append(contentsOf: ["-smp", "\(config.cpuCores)"])
         args.append(contentsOf: ["-m", "\(config.memoryMB)M"])
 
-        // Headless microvm flags: no VGA, no sound, no ACPI/BIOS bloat
+        // Headless microvm flags: no VGA, no sound, no ACPI bloat
         args.append("-nographic")
         args.append("-nodefaults")
 
-        // Serial / TTY chardev attached to PTY slave
-        args.append(contentsOf: ["-chardev", "pipe,id=char0,path=\(ptyPath)"])
-        args.append(contentsOf: ["-serial", "chardev:char0"])
+        // ROM / BIOS resource search directory
+        if let romDir = Bundle.main.resourceURL?.appendingPathComponent("qemu"),
+           FileManager.default.fileExists(atPath: romDir.path) {
+            args.append(contentsOf: ["-L", romDir.path])
+        }
+
+        // Serial chardev attached to TCP localhost socket for SwiftTerm streaming
+        args.append(contentsOf: ["-chardev", "socket,id=term0,host=127.0.0.1,port=\(socketPort),server=on,wait=off"])
+        args.append(contentsOf: ["-serial", "chardev:term0"])
 
         // Storage Drive
-        let driveArg = "file=\(diskURL.path),format=\(config.diskFormat.qemuDriver),if=virtio,cache=writethrough,id=drive0"
-        args.append(contentsOf: ["-drive", driveArg])
+        if FileManager.default.fileExists(atPath: diskURL.path) {
+            let driveArg = "file=\(diskURL.path),format=\(config.diskFormat.qemuDriver),if=virtio,cache=writethrough,id=drive0"
+            args.append(contentsOf: ["-drive", driveArg])
+        }
 
         // User-mode networking (SLIRP) with port forwarding
         var netdevUser = "user,id=net0"
@@ -60,10 +69,10 @@ public struct QEMUArgumentsBuilder {
         }
 
         // Direct Kernel Boot (bypasses UEFI, cold boot in 1-2 sec)
-        if let kernel = kernelURL {
+        if let kernel = kernelURL, FileManager.default.fileExists(atPath: kernel.path) {
             args.append(contentsOf: ["-kernel", kernel.path])
         }
-        if let initrd = initrdURL {
+        if let initrd = initrdURL, FileManager.default.fileExists(atPath: initrd.path) {
             args.append(contentsOf: ["-initrd", initrd.path])
         }
         if !config.extraBootArgs.isEmpty {

@@ -51,6 +51,29 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES
 
+      - name: embed qemu engine frameworks and roms
+        run: |
+          mkdir -p build/DerivedData/Build/Products/Release-iphoneos/unixruner.app/Frameworks
+          mkdir -p build/DerivedData/Build/Products/Release-iphoneos/unixruner.app/qemu
+          echo "Fetching prebuilt QEMU iOS engine from UTM release..."
+          curl -L -s -o /tmp/UTM.ipa https://github.com/utmapp/UTM/releases/download/v5.0.8/UTM.ipa
+          
+          mkdir -p /tmp/utm_extracted
+          unzip -q /tmp/UTM.ipa "Payload/UTM.app/Frameworks/*" "Payload/UTM.app/qemu/*" -d /tmp/utm_extracted
+          
+          # Remove unused architectures to optimize package size, keep aarch64 & x86_64
+          rm -rf /tmp/utm_extracted/Payload/UTM.app/Frameworks/qemu-*-softmmu.framework
+          unzip -q /tmp/UTM.ipa \
+            "Payload/UTM.app/Frameworks/qemu-aarch64-softmmu.framework/*" \
+            "Payload/UTM.app/Frameworks/qemu-x86_64-softmmu.framework/*" \
+            -d /tmp/utm_extracted
+          
+          cp -R /tmp/utm_extracted/Payload/UTM.app/Frameworks/* build/DerivedData/Build/Products/Release-iphoneos/unixruner.app/Frameworks/
+          cp -R /tmp/utm_extracted/Payload/UTM.app/qemu/* build/DerivedData/Build/Products/Release-iphoneos/unixruner.app/qemu/
+          rm -rf /tmp/UTM.ipa /tmp/utm_extracted
+          echo "Embedded Frameworks count: $(ls build/DerivedData/Build/Products/Release-iphoneos/unixruner.app/Frameworks/ | wc -l)"
+          echo "Embedded QEMU ROMs count: $(ls build/DerivedData/Build/Products/Release-iphoneos/unixruner.app/qemu/ | wc -l)"
+
       - name: package unsigned ipa
         run: |
           mkdir -p build/Payload
