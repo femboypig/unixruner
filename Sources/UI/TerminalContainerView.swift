@@ -103,9 +103,9 @@ public struct SwiftTermRepresentable: UIViewRepresentable {
 
         public func scrolled(source: TerminalView, position: Double) {}
         public func setTerminalTitle(source: TerminalView, title: String) {}
-        public func sizeChanged(source: TerminalView) {}
+        public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {}
         public func clipboardCopy(source: TerminalView, content: Data) {}
-        public func rangeChanged(source: TerminalView, start: Position, end: Position) {}
+        public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
         public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
         public func requestOpenLink(source: TerminalView, link: String, params: [String : String]) {}
         public func bell(source: TerminalView) {}

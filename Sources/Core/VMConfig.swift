@@ -1,6 +1,6 @@
 import Foundation
 
-public struct VMConfig: Codable, Identifiable, Equatable {
+public struct VMConfig: Codable, Identifiable, Equatable, Hashable {
     public var id: UUID
     public var name: String
     public var architecture: Architecture

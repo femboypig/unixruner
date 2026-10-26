@@ -1,10 +1,10 @@
 import Foundation
-public enum BootMethod: String, Codable {
+public enum BootMethod: String, Codable, Hashable {
     case directKernel
     case cloudImage
 }
 
-public struct DistroAsset: Codable, Equatable {
+public struct DistroAsset: Codable, Equatable, Hashable {
     public let url: URL
     public let expectedChecksumSHA256: String?
     public let filename: String
@@ -16,7 +16,7 @@ public struct DistroAsset: Codable, Equatable {
     }
 }
 
-public struct DistroArchitectureSpec: Codable, Equatable {
+public struct DistroArchitectureSpec: Codable, Equatable, Hashable {
     public let architecture: Architecture
     public let kernelAsset: DistroAsset?
     public let initrdAsset: DistroAsset?
@@ -38,7 +38,7 @@ public struct DistroArchitectureSpec: Codable, Equatable {
     }
 }
 
-public struct DistroPreset: Identifiable, Codable, Equatable {
+public struct DistroPreset: Identifiable, Codable, Equatable, Hashable {
     public let id: String
     public let name: String
     public let tag: String
