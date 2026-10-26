@@ -37,6 +37,23 @@ jobs:
       - name: generate xcode project
         run: xcodegen generate
 
+      - name: run automated tests
+        run: |
+          SIM_DEST="platform=iOS Simulator,name=iPhone 16"
+          if ! xcrun simctl list devices available | grep -q "iPhone 16"; then
+            SIM_NAME=$(xcrun simctl list devices available | grep "iPhone" | head -n 1 | sed -E 's/^[ ]+([^()]+) \(.*/\1/')
+            SIM_DEST="platform=iOS Simulator,name=${SIM_NAME}"
+          fi
+          echo "Running tests on destination: ${SIM_DEST}"
+          xcodebuild test \
+            -project unixruner.xcodeproj \
+            -scheme unixruner \
+            -destination "${SIM_DEST}" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
       - name: build app
         run: |
           xcodebuild build \

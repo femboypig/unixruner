@@ -23,8 +23,7 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
             self.delegate?.vmEngine(self, didReceiveOutput: data)
         }
 
-        let sharedDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Shared", isDirectory: true)
+        let sharedDir = DiskManager.shared.sharedFolderDirectory
 
         let args = QEMUArgumentsBuilder.build(
             config: config,
@@ -81,7 +80,14 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
     private func runQEMUProcess(config: VMConfig, arguments: [String]) {
         do {
             try qemuRunner.load(for: config.architecture)
-            try qemuRunner.run(arguments: arguments)
+            try qemuRunner.run(arguments: arguments) { [weak self] stdErrOutput in
+                guard let self = self, !stdErrOutput.isEmpty else { return }
+                if let data = "\r\n[qemu] \(stdErrOutput)\r\n".data(using: .utf8) {
+                    DispatchQueue.main.async {
+                        self.delegate?.vmEngine(self, didReceiveOutput: data)
+                    }
+                }
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.updateState(.terminated(exitCode: 0))

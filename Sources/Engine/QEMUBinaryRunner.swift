@@ -64,25 +64,73 @@ public final class QEMUBinaryRunner {
         self.qemu_cleanup = unsafeBitCast(cleanSym, to: QemuCleanupFunc.self)
     }
 
-    public func run(arguments: [String]) throws {
+    public func run(arguments: [String], onStdErr: ((String) -> Void)? = nil) throws {
         guard let qemu_init = qemu_init,
               let qemu_main_loop = qemu_main_loop,
               let qemu_cleanup = qemu_cleanup else {
             throw NSError(domain: "QEMUBinaryRunner", code: 5, userInfo: [NSLocalizedDescriptionKey: "QEMU runner not loaded"])
         }
 
+        // Enable JIT translation via ptrace self-attach if running without external debugger
+        _ = ptrace(0, 0, nil, 0) // PT_TRACE_ME = 0
+
+        // Intercept exit() calls from QEMU thread to prevent app termination
+        let qemuThread = pthread_self()
+        _ = atexit_b {
+            if pthread_equal(pthread_self(), qemuThread) != 0 {
+                pthread_exit(nil)
+            }
+        }
+
+        // Set up stderr pipe capture so diagnostic failures are recorded
+        var pipeFDs = [Int32](repeating: 0, count: 2)
+        let hasPipe = pipe(&pipeFDs) == 0
+        let savedStderr = dup(STDERR_FILENO)
+        if hasPipe {
+            dup2(pipeFDs[1], STDERR_FILENO)
+            close(pipeFDs[1])
+        }
+
+        // Build valid argv
         let cArgs = arguments.map { strdup($0) }
         var argv: [UnsafePointer<CChar>?] = cArgs.map { UnsafePointer($0) }
         argv.append(nil)
 
+        // Build valid, non-null envp from environment
+        var envEntries: [String] = []
+        for (k, v) in ProcessInfo.processInfo.environment {
+            envEntries.append("\(k)=\(v)")
+        }
+        if !envEntries.contains(where: { $0.hasPrefix("QEMU_AUDIO_DRV=") }) {
+            envEntries.append("QEMU_AUDIO_DRV=none")
+        }
+        let cEnv = envEntries.map { strdup($0) }
+        var envp: [UnsafePointer<CChar>?] = cEnv.map { UnsafePointer($0) }
+        envp.append(nil)
+
         let argc = Int32(arguments.count)
 
-        let initResult = argv.withUnsafeBufferPointer { buffer in
-            qemu_init(argc, buffer.baseAddress, nil)
+        let initResult = argv.withUnsafeBufferPointer { argvBuf in
+            envp.withUnsafeBufferPointer { envpBuf in
+                qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
+            }
         }
 
-        for ptr in cArgs {
-            free(ptr)
+        for ptr in cArgs { free(ptr) }
+        for ptr in cEnv { free(ptr) }
+
+        if hasPipe {
+            dup2(savedStderr, STDERR_FILENO)
+            close(savedStderr)
+
+            var buf = [UInt8](repeating: 0, count: 4096)
+            let n = read(pipeFDs[0], &buf, buf.count - 1)
+            close(pipeFDs[0])
+            if n > 0 {
+                buf[n] = 0
+                let errString = String(cString: buf)
+                onStdErr?(errString)
+            }
         }
 
         guard initResult == 0 else {

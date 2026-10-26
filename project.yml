@@ -37,3 +37,18 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/Frameworks"
+
+  unixrunerTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: unixruner
+    settings:
+      base:
+        PRODUCT_NAME: unixrunerTests
+        SWIFT_VERSION: "5.9"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO

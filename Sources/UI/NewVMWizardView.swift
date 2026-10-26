@@ -67,6 +67,7 @@ public struct NewVMWizardView: View {
                 vmName = newPreset.name
                 memoryMB = Double(newPreset.recommendedMemoryMB)
                 cpuCores = newPreset.recommendedCores
+                diskFormat = (newPreset.bootMethod == .cloudImage) ? .raw : .qcow2
             }
         }
     }
