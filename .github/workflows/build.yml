@@ -39,16 +39,12 @@ jobs:
 
       - name: run automated tests
         run: |
-          SIM_DEST="platform=iOS Simulator,name=iPhone 16"
-          if ! xcrun simctl list devices available | grep -q "iPhone 16"; then
-            SIM_NAME=$(xcrun simctl list devices available | grep "iPhone" | head -n 1 | sed -E 's/^[ ]+([^()]+) \(.*/\1/')
-            SIM_DEST="platform=iOS Simulator,name=${SIM_NAME}"
-          fi
-          echo "Running tests on destination: ${SIM_DEST}"
+          DEVICE_ID=$(xcrun simctl list devices available | grep -E "iPhone" | head -n 1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+          echo "Running tests on simulator device ID: ${DEVICE_ID}"
           xcodebuild test \
             -project unixruner.xcodeproj \
             -scheme unixruner \
-            -destination "${SIM_DEST}" \
+            -destination "platform=iOS Simulator,id=${DEVICE_ID}" \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
