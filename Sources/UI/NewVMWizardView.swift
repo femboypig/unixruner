@@ -1,4 +1,8 @@
 import SwiftUI
+import Core
+import Presets
+import Storage
+
 public struct NewVMWizardView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -21,34 +25,37 @@ public struct NewVMWizardView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            Form {
-                presetSection
-                configurationSection
-                hardwareSection
-                storageSection
-
-                if isInstalling {
-                    installationProgressSection
+        ZStack {
+            NavigationStack {
+                Form {
+                    presetSection
+                    configurationSection
+                    hardwareSection
+                    storageSection
+                }
+                .navigationTitle("New Machine")
+                .navigationBarTitleDisplayMode(.inline)
+                .disabled(isInstalling)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                            .disabled(isInstalling)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Install") { startInstallation() }
+                            .disabled(isInstalling || vmName.isEmpty)
+                    }
                 }
             }
-            .navigationTitle("New Linux Machine")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(isInstalling)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Install") { startInstallation() }
-                        .disabled(isInstalling || vmName.isEmpty)
-                }
+
+            if isInstalling {
+                installationModalHUD
             }
         }
     }
 
     private var presetSection: some View {
-        Section("Choose Distribution") {
+        Section("Distribution") {
             Picker("Distribution", selection: $selectedPreset) {
                 ForEach(DistroRegistry.shared.presets) { preset in
                     Text(preset.name).tag(preset)
@@ -60,15 +67,11 @@ public struct NewVMWizardView: View {
                 memoryMB = Double(newPreset.recommendedMemoryMB)
                 cpuCores = newPreset.recommendedCores
             }
-
-            Text(selectedPreset.summary)
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
     }
 
     private var configurationSection: some View {
-        Section("Instance Name & Target") {
+        Section("Instance") {
             TextField("Name", text: $vmName)
 
             Picker("Architecture", selection: $architecture) {
@@ -77,29 +80,23 @@ public struct NewVMWizardView: View {
                         .tag(arch)
                 }
             }
-
-            Text(architecture.performanceNote)
-                .font(.caption2)
-                .foregroundColor(architecture == .arm64 ? .green : .orange)
         }
     }
 
     private var hardwareSection: some View {
-        Section("Compute Allocation") {
-            VStack(alignment: .leading, spacing: 4) {
+        Section("Compute") {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("Memory")
                     Spacer()
-                    Text("\(Int(memoryMB)) MB")
-                        .font(.subheadline.monospaced())
+                    TextField("MB", value: $memoryMB, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                    Text("MB")
+                        .foregroundColor(.secondary)
                 }
-                Slider(value: $memoryMB, in: 256...3072, step: 256)
-
-                if memoryMB > 2048 {
-                    Text("Warning: Allocations over 2GB may trigger iOS Jetsam termination on devices without increased-memory entitlement.")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                }
+                Slider(value: $memoryMB, in: 256...4096, step: 128)
             }
 
             Stepper("CPU Cores: \(cpuCores)", value: $cpuCores, in: 1...4)
@@ -107,53 +104,71 @@ public struct NewVMWizardView: View {
     }
 
     private var storageSection: some View {
-        Section("Virtual Disk") {
+        Section("Disk") {
             Picker("Format", selection: $diskFormat) {
                 ForEach(DiskFormat.allCases) { format in
                     Text(format.displayName).tag(format)
                 }
             }
-            Text(diskFormat.subtitle)
-                .font(.caption2)
-                .foregroundColor(.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Virtual Size")
+                    Text("Disk Size")
                     Spacer()
-                    Text("\(Int(diskSizeGB)) GB")
-                        .font(.subheadline.monospaced())
+                    TextField("GB", value: $diskSizeGB, format: .number)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                    Text("GB")
+                        .foregroundColor(.secondary)
                 }
-                Slider(value: $diskSizeGB, in: 2...32, step: 2)
+                Slider(value: $diskSizeGB, in: 2...64, step: 1)
             }
         }
     }
 
-    private var installationProgressSection: some View {
-        Section("Installation Progress") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(installationStatus)
-                    .font(.footnote)
+    private var installationModalHUD: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
 
-                switch downloader.state {
-                case .downloading(let progress, _, _):
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.4)
+                    .tint(.primary)
+
+                Text(installationStatus)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+
+                if case .downloading(let progress, let bytesWritten, let totalBytes) = downloader.state {
                     ProgressView(value: progress)
-                case .completed:
-                    Label("Download Complete", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                case .failed(let err):
-                    Text("Failed: \(err)")
-                        .foregroundColor(.red)
-                case .idle:
-                    ProgressView()
+                        .padding(.horizontal)
+
+                    if totalBytes > 0 {
+                        Text("\(Int(progress * 100))% • \(ByteCountFormatter.string(fromByteCount: bytesWritten, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))")
+                            .font(.caption.monospaced())
+                            .foregroundColor(.secondary)
+                    }
                 }
+
+                Button("Cancel") {
+                    downloader.cancel()
+                    isInstalling = false
+                }
+                .buttonStyle(.bordered)
             }
+            .padding(24)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(16)
+            .shadow(radius: 20)
+            .padding(.horizontal, 32)
         }
     }
 
     private func startInstallation() {
         guard let spec = selectedPreset.specs[architecture] else {
-            installationStatus = "Selected architecture not available for this distro"
+            installationStatus = "Architecture not supported for \(selectedPreset.name)"
             return
         }
 
@@ -162,7 +177,7 @@ public struct NewVMWizardView: View {
         let diskFilename = "rootfs.\(diskFormat.fileExtension)"
         let targetDiskURL = DiskManager.shared.diskURL(for: vmId, filename: diskFilename)
 
-        installationStatus = "Allocating virtual disk (\(diskFormat.rawValue))..."
+        installationStatus = "Allocating virtual disk..."
         do {
             try DiskManager.shared.allocateEmptyDisk(
                 at: targetDiskURL,
@@ -175,15 +190,14 @@ public struct NewVMWizardView: View {
             return
         }
 
-        // If direct kernel boot, download kernel & initrd
         if let kernelAsset = spec.kernelAsset {
-            installationStatus = "Fetching Linux kernel..."
+            installationStatus = "Downloading kernel..."
             let kernelDest = DiskManager.shared.diskURL(for: vmId, filename: kernelAsset.filename)
             downloader.download(from: kernelAsset.url, to: kernelDest) { result in
                 switch result {
                 case .success:
                     if let initrdAsset = spec.initrdAsset {
-                        self.installationStatus = "Fetching initramfs..."
+                        self.installationStatus = "Downloading initramfs..."
                         let initrdDest = DiskManager.shared.diskURL(for: vmId, filename: initrdAsset.filename)
                         self.downloader.download(from: initrdAsset.url, to: initrdDest) { initrdResult in
                             if case .success = initrdResult {
@@ -194,19 +208,18 @@ public struct NewVMWizardView: View {
                         self.finalizeVM(vmId: vmId, spec: spec, kernelFile: kernelAsset.filename, initrdFile: nil)
                     }
                 case .failure(let error):
-                    self.installationStatus = "Kernel download failed: \(error.localizedDescription)"
+                    self.installationStatus = "Kernel failed: \(error.localizedDescription)"
                     self.isInstalling = false
                 }
             }
         } else {
-            // Cloud image boot: download image directly
-            installationStatus = "Fetching cloud disk image..."
+            installationStatus = "Downloading cloud image..."
             downloader.download(from: spec.diskAsset.url, to: targetDiskURL) { result in
                 switch result {
                 case .success:
                     self.finalizeVM(vmId: vmId, spec: spec, kernelFile: nil, initrdFile: nil)
                 case .failure(let error):
-                    self.installationStatus = "Image download failed: \(error.localizedDescription)"
+                    self.installationStatus = "Image failed: \(error.localizedDescription)"
                     self.isInstalling = false
                 }
             }
@@ -228,7 +241,6 @@ public struct NewVMWizardView: View {
             extraBootArgs: spec.defaultBootArgs
         )
 
-        // Save VM to storage
         var vms: [VMConfig] = []
         let listURL = DiskManager.shared.baseVMDirectory.appendingPathComponent("vms.json")
         if let data = try? Data(contentsOf: listURL),

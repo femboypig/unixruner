@@ -1,6 +1,15 @@
 import SwiftUI
+import UIKit
+import Storage
+
 public struct SettingsView: View {
     @State private var availableBytes: Int64 = 0
+    @State private var usedBytes: Int64 = 0
+    @State private var showingCacheCleanedAlert = false
+
+    @AppStorage("defaultArchitecture") private var defaultArchRaw: String = "arm64"
+    @AppStorage("defaultMemoryMB") private var defaultMemoryMB: Int = 1024
+    @AppStorage("terminalFontSize") private var terminalFontSize: Double = 13.0
 
     public init() {}
 
@@ -9,58 +18,113 @@ public struct SettingsView: View {
             Form {
                 storageSection
                 filesystemSection
-                systemSection
+                defaultsSection
+                terminalSection
             }
             .navigationTitle("Settings")
-            .onAppear(perform: updateStats)
+            .onAppear(perform: calculateSpace)
+            .alert("Cache Cleared", isPresented: $showingCacheCleanedAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Temporary download cache has been cleaned.")
+            }
         }
     }
 
     private var storageSection: some View {
-        Section("Device Storage") {
+        Section("Storage") {
             HStack {
-                Text("Available Space")
+                Text("Available on Device")
                 Spacer()
                 Text(ByteCountFormatter.string(fromByteCount: availableBytes, countStyle: .file))
                     .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Text("Used by Virtual Machines")
+                Spacer()
+                Text(ByteCountFormatter.string(fromByteCount: usedBytes, countStyle: .file))
+                    .foregroundColor(.secondary)
+            }
+
+            Button("Clean Temporary Cache") {
+                clearTempCache()
             }
         }
     }
 
     private var filesystemSection: some View {
-        Section("Host-Guest Sharing") {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("iOS Files Integration")
-                    .font(.headline)
-                Text("Files placed in 'On My iPhone/unixruner/Shared' are automatically mounted inside the Linux guest at `/mnt/host_share` via virtio-9p.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+        Section("File Sharing") {
+            Button {
+                openSharedFolder()
+            } label: {
+                Label("Open Shared Folder in Files", systemImage: "folder")
             }
-            .padding(.vertical, 4)
+
+            Text("Shared path: Files.app → On My iPhone → unixruner → Shared")
+                .font(.caption2)
+                .foregroundColor(.secondary)
         }
     }
 
-    private var systemSection: some View {
-        Section("Runtime & Entitlements") {
-            HStack {
-                Text("JIT Acceleration")
-                Spacer()
-                Text("Dynamic Codesigning")
-                    .font(.caption)
-                    .foregroundColor(.green)
+    private var defaultsSection: some View {
+        Section("VM Defaults") {
+            Picker("Default Architecture", selection: $defaultArchRaw) {
+                Text("ARM64").tag("arm64")
+                Text("AMD64").tag("x86_64")
             }
 
-            HStack {
-                Text("Memory Cap")
-                Spacer()
-                Text("Extended (Jetsam Guarded)")
-                    .font(.caption)
-                    .foregroundColor(.blue)
+            Stepper("Default RAM: \(defaultMemoryMB) MB", value: $defaultMemoryMB, in: 512...3072, step: 256)
+        }
+    }
+
+    private var terminalSection: some View {
+        Section("Terminal") {
+            Picker("Font Size", selection: $terminalFontSize) {
+                Text("Small (11pt)").tag(11.0)
+                Text("Medium (13pt)").tag(13.0)
+                Text("Large (15pt)").tag(15.0)
+                Text("Extra Large (17pt)").tag(17.0)
             }
         }
     }
 
-    private func updateStats() {
+    private func calculateSpace() {
         availableBytes = DiskManager.shared.availableDeviceDiskSpaceBytes()
+
+        let baseDir = DiskManager.shared.baseVMDirectory
+        let resourceKeys: [URLResourceKey] = [.fileSizeKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: baseDir,
+            includingPropertiesForKeys: resourceKeys,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
+                  let size = values.fileSize else { continue }
+            total += Int64(size)
+        }
+        usedBytes = total
+    }
+
+    private func clearTempCache() {
+        let tempDir = FileManager.default.temporaryDirectory
+        try? FileManager.default.removeItem(at: tempDir)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        calculateSpace()
+        showingCacheCleanedAlert = true
+    }
+
+    private func openSharedFolder() {
+        let sharedURL = DiskManager.shared.sharedFolderDirectory
+        if let filesURL = URL(string: "shareddocuments://\(sharedURL.path)"),
+           UIApplication.shared.canOpenURL(filesURL) {
+            UIApplication.shared.open(filesURL)
+        } else {
+            // Fallback to documents URL
+            UIApplication.shared.open(sharedURL)
+        }
     }
 }

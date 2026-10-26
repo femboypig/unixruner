@@ -22,13 +22,23 @@ public final class PTYBridge {
         var slave: Int32 = 0
         var nameBuffer = [CChar](repeating: 0, count: 128)
 
-        if openpty(&master, &slave, &nameBuffer, nil, nil) != 0 {
-            throw NSError(domain: "PTYBridge", code: Int(errno), userInfo: [NSLocalizedDescriptionKey: "Failed to open POSIX PTY pair"])
+        if openpty(&master, &slave, &nameBuffer, nil, nil) == 0 {
+            self.masterFD = master
+            self.slaveFD = slave
+            self.slavePath = String(cString: nameBuffer)
+            return
         }
 
-        self.masterFD = master
-        self.slaveFD = slave
-        self.slavePath = String(cString: nameBuffer)
+        // Sandbox fallback: pipe pair
+        var fds = [Int32](repeating: 0, count: 2)
+        if pipe(&fds) == 0 {
+            self.masterFD = fds[0]
+            self.slaveFD = fds[1]
+            self.slavePath = "/dev/fd/\(fds[1])"
+            return
+        }
+
+        throw NSError(domain: "PTYBridge", code: Int(errno), userInfo: [NSLocalizedDescriptionKey: "Failed to open POSIX PTY or pipe"])
     }
 
     public func startReading() {

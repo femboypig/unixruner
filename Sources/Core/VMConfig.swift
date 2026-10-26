@@ -50,4 +50,21 @@ public struct VMConfig: Codable, Identifiable, Equatable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    public var distroIcon: String {
+        let lower = name.lowercased()
+        if lower.contains("alpine") {
+            return "mountain.2.fill"
+        } else if lower.contains("debian") {
+            return "swirl.circle.righthalf.filled"
+        } else if lower.contains("ubuntu") {
+            return "circle.circle.fill"
+        } else if lower.contains("arch") {
+            return "arrowtriangle.up.fill"
+        } else if lower.contains("void") {
+            return "rhombus.fill"
+        } else {
+            return "terminal.fill"
+        }
+    }
 }

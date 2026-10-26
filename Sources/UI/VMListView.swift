@@ -1,9 +1,12 @@
 import SwiftUI
+import Core
+import Engine
+import Storage
+
 public struct VMListView: View {
     @ObservedObject var processManager = VMProcessManager.shared
     @State private var vms: [VMConfig] = []
     @State private var showingWizard = false
-    @State private var selectedVMForTerminal: VMConfig?
 
     public init() {}
 
@@ -14,7 +17,13 @@ public struct VMListView: View {
                     emptyStateSection
                 } else {
                     ForEach(vms) { vm in
-                        vmRow(for: vm)
+                        NavigationLink(destination: VMDetailView(vm: vm, onUpdated: { updatedVM in
+                            if let idx = vms.firstIndex(where: { $0.id == updatedVM.id }) {
+                                vms[idx] = updatedVM
+                            }
+                        }, onDeleted: reloadVMs)) {
+                            vmRow(for: vm)
+                        }
                     }
                     .onDelete(perform: deleteVM)
                 }
@@ -34,9 +43,6 @@ public struct VMListView: View {
                     vms.append(newVM)
                 })
             }
-            .navigationDestination(item: $selectedVMForTerminal) { _ in
-                TerminalContainerView()
-            }
             .onAppear(perform: reloadVMs)
         }
     }
@@ -49,11 +55,11 @@ public struct VMListView: View {
                     .foregroundColor(.secondary)
                 Text("No Virtual Machines")
                     .font(.headline)
-                Text("Install a minimal Alpine Linux or Debian instance to start executing CLI commands directly on your iPhone.")
+                Text("Create an instance to start executing CLI commands directly on your iPhone.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
-                Button("Create First VM") {
+                Button("Create Machine") {
                     showingWizard = true
                 }
                 .buttonStyle(.borderedProminent)
@@ -66,21 +72,31 @@ public struct VMListView: View {
     private func vmRow(for vm: VMConfig) -> some View {
         let isCurrentRunning = processManager.activeVMConfig?.id == vm.id && processManager.currentState == .running
 
-        return HStack(spacing: 12) {
+        return HStack(spacing: 14) {
+            // Distro Icon Badge
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: vm.distroIcon)
+                    .font(.system(size: 22))
+                    .foregroundColor(.accentColor)
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(vm.name)
                         .font(.headline)
                     Image(systemName: vm.architecture.badgeIcon)
                         .foregroundColor(vm.architecture == .arm64 ? .green : .orange)
-                        .font(.caption)
+                        .font(.caption2)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text(vm.architecture.displayName)
                         .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
                         .background(Color(.tertiarySystemFill))
                         .cornerRadius(4)
 
@@ -88,7 +104,11 @@ public struct VMListView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
-                    Text("\(vm.memoryMB) MB RAM")
+                    Text("•")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    Text("\(vm.memoryMB) MB")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -97,48 +117,16 @@ public struct VMListView: View {
             Spacer()
 
             if isCurrentRunning {
-                Button {
-                    selectedVMForTerminal = vm
-                } label: {
-                    Text("Open")
-                        .font(.subheadline.bold())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-            } else {
-                Button {
-                    startVM(vm)
-                } label: {
-                    Image(systemName: "play.fill")
-                        .font(.headline)
-                        .foregroundColor(.blue)
-                }
+                Text("RUNNING")
+                    .font(.caption2.bold())
+                    .foregroundColor(.green)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.15))
+                    .cornerRadius(4)
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func startVM(_ vm: VMConfig) {
-        let diskURL = DiskManager.shared.diskURL(for: vm.id, filename: vm.diskRelativePath)
-        let kernelURL = vm.kernelRelativePath.map { DiskManager.shared.diskURL(for: vm.id, filename: $0) }
-        let initrdURL = vm.initrdRelativePath.map { DiskManager.shared.diskURL(for: vm.id, filename: $0) }
-
-        do {
-            let engine = HeadlessQEMUEngine()
-            try processManager.launch(
-                config: vm,
-                engine: engine,
-                diskURL: diskURL,
-                kernelURL: kernelURL,
-                initrdURL: initrdURL
-            )
-            selectedVMForTerminal = vm
-        } catch {
-            print("Failed to launch VM: \(error.localizedDescription)")
-        }
     }
 
     private func deleteVM(at offsets: IndexSet) {
