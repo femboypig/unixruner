@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 import SwiftTerm
-import Engine
-
 public struct TerminalContainerView: View {
     @ObservedObject var processManager = VMProcessManager.shared
     @State private var isCtrlActive = false

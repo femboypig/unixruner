@@ -1,6 +1,4 @@
 import Foundation
-import Core
-
 public enum BootMethod: String, Codable {
     case directKernel
     case cloudImage

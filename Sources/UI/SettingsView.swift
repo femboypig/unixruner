@@ -1,6 +1,4 @@
 import SwiftUI
-import Storage
-
 public struct SettingsView: View {
     @State private var availableBytes: Int64 = 0
 

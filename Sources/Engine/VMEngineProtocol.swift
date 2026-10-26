@@ -1,6 +1,4 @@
 import Foundation
-import Core
-
 public enum VMState: Equatable {
     case stopped
     case starting

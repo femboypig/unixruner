@@ -1,6 +1,4 @@
 import UIKit
-import Core
-
 public final class VMProcessManager: ObservableObject, VMEngineDelegate {
     public static let shared = VMProcessManager()
 

@@ -1,6 +1,4 @@
 import Foundation
-import Core
-
 public final class DiskManager {
     public static let shared = DiskManager()
 

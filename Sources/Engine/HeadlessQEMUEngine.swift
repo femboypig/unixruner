@@ -1,6 +1,4 @@
 import Foundation
-import Core
-
 public final class HeadlessQEMUEngine: VMEngineProtocol {
     public weak var delegate: VMEngineDelegate?
     public private(set) var state: VMState = .stopped

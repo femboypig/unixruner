@@ -1,6 +1,4 @@
 import Foundation
-import Core
-
 public final class DistroRegistry {
     public static let shared = DistroRegistry()
 
