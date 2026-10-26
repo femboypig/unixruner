@@ -11,7 +11,6 @@ public struct VMDetailView: View {
     @State private var launchErrorMessage: String?
     @State private var showingErrorAlert = false
 
-    // New port forward state
     @State private var newPortName = ""
     @State private var newHostPort = ""
     @State private var newGuestPort = ""
@@ -28,100 +27,121 @@ public struct VMDetailView: View {
 
     public var body: some View {
         Form {
-            headerSection
+            heroHeaderSection
             actionSection
             hardwareSection
             portForwardingSection
             bootSection
             dangerSection
         }
-        .navigationTitle(vm.name)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $showingTerminal) {
-            TerminalContainerView()
+        .fullScreenCover(isPresented: $showingTerminal) {
+            NavigationStack {
+                TerminalContainerView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Close") {
+                                showingTerminal = false
+                            }
+                        }
+                    }
+            }
         }
         .alert("Launch Failed", isPresented: $showingErrorAlert, presenting: launchErrorMessage) { _ in
             Button("OK", role: .cancel) {}
         } message: { msg in
             Text(msg)
         }
-        .alert("Delete Virtual Machine?", isPresented: $showingDeleteAlert) {
+        .alert("Delete Machine?", isPresented: $showingDeleteAlert) {
             Button("Delete", role: .destructive) {
                 deleteVM()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will permanently delete the disk image and all installed packages.")
+            Text("This will permanently erase the disk and files for \(vm.name).")
         }
     }
 
-    private var headerSection: some View {
+    private var heroHeaderSection: some View {
         Section {
-            HStack(spacing: 16) {
-                Image(systemName: vm.distroIcon)
-                    .font(.system(size: 38))
-                    .foregroundColor(.accentColor)
-                    .frame(width: 48, height: 48)
+            VStack(spacing: 12) {
+                DistroLogoView(imageName: vm.distroImageName, size: 56)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(vm.name)
-                        .font(.title3.bold())
+                Text(vm.name)
+                    .font(.system(size: 22, weight: .bold))
 
-                    HStack(spacing: 8) {
-                        Label(vm.architecture.displayName, systemImage: vm.architecture.badgeIcon)
-                            .font(.caption2)
-                            .foregroundColor(vm.architecture == .arm64 ? .green : .orange)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isRunning ? Color.green : Color.secondary.opacity(0.4))
+                        .frame(width: 8, height: 8)
 
-                        Text(vm.diskFormat.displayName)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
+                    Text(isRunning ? "Running" : "Stopped")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(isRunning ? .green : .secondary)
                 }
-
-                Spacer()
-
-                Circle()
-                    .fill(isRunning ? Color.green : Color.secondary.opacity(0.3))
-                    .frame(width: 10, height: 10)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(isRunning ? Color.green.opacity(0.12) : Color(.tertiarySystemFill))
+                .cornerRadius(12)
             }
-            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
         }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
     }
 
     private var actionSection: some View {
         Section {
             if isRunning {
-                Button {
-                    showingTerminal = true
-                } label: {
-                    Label("Open Terminal", systemImage: "terminal.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                HStack(spacing: 12) {
+                    Button {
+                        showingTerminal = true
+                    } label: {
+                        Label("Terminal", systemImage: "terminal.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
 
-                Button(role: .destructive) {
-                    processManager.stop()
-                } label: {
-                    Label("Stop Machine", systemImage: "stop.fill")
-                        .frame(maxWidth: .infinity)
+                    Button(role: .destructive) {
+                        processManager.stop()
+                    } label: {
+                        Label("Stop", systemImage: "stop.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                    }
+                    .buttonStyle(.bordered)
                 }
             } else {
                 Button {
                     launchVM()
                 } label: {
-                    Label("Start Machine", systemImage: "play.fill")
+                    Label("Start & Open Terminal", systemImage: "play.fill")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
+                        .frame(height: 38)
                 }
                 .buttonStyle(.borderedProminent)
             }
         }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
     }
 
     private var hardwareSection: some View {
-        Section("Hardware") {
+        Section("Compute Allocation") {
+            HStack {
+                Text("Architecture")
+                Spacer()
+                Text(vm.architecture.displayName)
+                    .foregroundColor(.secondary)
+            }
+
             HStack {
                 Text("Memory")
                 Spacer()
@@ -140,7 +160,7 @@ public struct VMDetailView: View {
             HStack {
                 Text("Virtual Disk")
                 Spacer()
-                Text(ByteCountFormatter.string(fromByteCount: vm.diskSizeBytes, countStyle: .file))
+                Text("\(ByteCountFormatter.string(fromByteCount: vm.diskSizeBytes, countStyle: .file)) (\(vm.diskFormat.displayName))")
                     .foregroundColor(.secondary)
             }
         }
@@ -163,7 +183,7 @@ public struct VMDetailView: View {
             }
 
             HStack {
-                TextField("Name", text: $newPortName)
+                TextField("Label", text: $newPortName)
                 TextField("Host", text: $newHostPort)
                     .keyboardType(.numberPad)
                     .frame(width: 60)
@@ -214,7 +234,7 @@ public struct VMDetailView: View {
         let initrdURL = vm.initrdRelativePath.map { DiskManager.shared.diskURL(for: vm.id, filename: $0) }
 
         guard FileManager.default.fileExists(atPath: diskURL.path) else {
-            launchErrorMessage = "Virtual disk file missing: \(vm.diskRelativePath)"
+            launchErrorMessage = "Virtual disk missing: \(vm.diskRelativePath). Please reinstall."
             showingErrorAlert = true
             return
         }

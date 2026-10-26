@@ -18,12 +18,16 @@ public struct VMListView: View {
                                 vms[idx] = updatedVM
                             }
                         }, onDeleted: reloadVMs)) {
-                            vmRow(for: vm)
+                            vmCard(for: vm)
                         }
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                     }
                     .onDelete(perform: deleteVM)
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("unixruner")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -31,6 +35,7 @@ public struct VMListView: View {
                         showingWizard = true
                     } label: {
                         Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
                     }
                 }
             }
@@ -44,85 +49,71 @@ public struct VMListView: View {
     }
 
     private var emptyStateSection: some View {
-        Section {
-            VStack(spacing: 12) {
-                Image(systemName: "terminal")
-                    .font(.system(size: 40))
-                    .foregroundColor(.secondary)
-                Text("No Virtual Machines")
-                    .font(.headline)
-                Text("Create an instance to start executing CLI commands directly on your iPhone.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("Create Machine") {
-                    showingWizard = true
-                }
-                .buttonStyle(.borderedProminent)
+        VStack(spacing: 14) {
+            Image(systemName: "terminal")
+                .font(.system(size: 42))
+                .foregroundColor(.secondary)
+            Text("No Virtual Machines")
+                .font(.headline)
+            Text("Create an instance to start executing CLI commands directly on your iPhone.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Create Machine") {
+                showingWizard = true
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
+            .buttonStyle(.borderedProminent)
+            .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
 
-    private func vmRow(for vm: VMConfig) -> some View {
-        let isCurrentRunning = processManager.activeVMConfig?.id == vm.id && processManager.currentState == .running
+    private func vmCard(for vm: VMConfig) -> some View {
+        let isRunning = processManager.activeVMConfig?.id == vm.id && processManager.currentState == .running
 
         return HStack(spacing: 14) {
-            // Distro Icon Badge
-            ZStack {
-                Circle()
-                    .fill(Color.accentColor.opacity(0.12))
-                    .frame(width: 44, height: 44)
-                Image(systemName: vm.distroIcon)
-                    .font(.system(size: 22))
-                    .foregroundColor(.accentColor)
-            }
+            DistroLogoView(imageName: vm.distroImageName, size: 42)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
                     Text(vm.name)
-                        .font(.headline)
-                    Image(systemName: vm.architecture.badgeIcon)
-                        .foregroundColor(vm.architecture == .arm64 ? .green : .orange)
-                        .font(.caption2)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    Circle()
+                        .fill(isRunning ? Color.green : Color.secondary.opacity(0.4))
+                        .frame(width: 8, height: 8)
                 }
 
                 HStack(spacing: 6) {
                     Text(vm.architecture.displayName)
-                        .font(.caption2)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color(.tertiarySystemFill))
-                        .cornerRadius(4)
-
-                    Text(vm.diskFormat.displayName)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-
                     Text("•")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-
                     Text("\(vm.memoryMB) MB")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    Text("•")
+                    Text(vm.diskFormat.displayName)
                 }
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(.secondary)
             }
 
             Spacer()
 
-            if isCurrentRunning {
-                Text("RUNNING")
-                    .font(.caption2.bold())
+            if isRunning {
+                Image(systemName: "waveform")
                     .foregroundColor(.green)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.green.opacity(0.15))
-                    .cornerRadius(4)
+                    .font(.system(size: 14))
             }
         }
-        .padding(.vertical, 4)
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isRunning ? Color.green.opacity(0.3) : Color(.separator).opacity(0.2), lineWidth: 1)
+        )
     }
 
     private func deleteVM(at offsets: IndexSet) {

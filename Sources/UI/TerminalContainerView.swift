@@ -35,6 +35,7 @@ public struct TerminalContainerView: View {
         }
         .navigationTitle(processManager.activeVMConfig?.name ?? "Terminal")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private func handleKeyPress(_ key: String) {

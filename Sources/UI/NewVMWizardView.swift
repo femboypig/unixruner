@@ -13,8 +13,9 @@ public struct NewVMWizardView: View {
     @State private var diskSizeGB: Double = 8
 
     @StateObject private var downloader = AssetDownloader()
-    @State private var isInstalling = false
+    @State private var isHUDVisible = false
     @State private var installationStatus = ""
+    @State private var errorMessage: String?
 
     public init(onCreated: @escaping (VMConfig) -> Void) {
         self.onCreated = onCreated
@@ -31,20 +32,20 @@ public struct NewVMWizardView: View {
                 }
                 .navigationTitle("New Machine")
                 .navigationBarTitleDisplayMode(.inline)
-                .disabled(isInstalling)
+                .disabled(isHUDVisible)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
-                            .disabled(isInstalling)
+                            .disabled(isHUDVisible)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Install") { startInstallation() }
-                            .disabled(isInstalling || vmName.isEmpty)
+                            .disabled(isHUDVisible || vmName.isEmpty)
                     }
                 }
             }
 
-            if isInstalling {
+            if isHUDVisible {
                 installationModalHUD
             }
         }
@@ -54,7 +55,11 @@ public struct NewVMWizardView: View {
         Section("Distribution") {
             Picker("Distribution", selection: $selectedPreset) {
                 ForEach(DistroRegistry.shared.presets) { preset in
-                    Text(preset.name).tag(preset)
+                    HStack {
+                        DistroLogoView(imageName: preset.id.components(separatedBy: "-").first, size: 20)
+                        Text(preset.name)
+                    }
+                    .tag(preset)
                 }
             }
             .pickerStyle(.menu)
@@ -125,50 +130,80 @@ public struct NewVMWizardView: View {
 
     private var installationModalHUD: some View {
         ZStack {
-            Color.black.opacity(0.4)
+            Color.black.opacity(0.45)
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {
-                ProgressView()
-                    .scaleEffect(1.4)
-                    .tint(.primary)
+                if let error = errorMessage {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(.red)
 
-                Text(installationStatus)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
+                    Text("Download Failed")
+                        .font(.headline)
 
-                if case .downloading(let progress, let bytesWritten, let totalBytes) = downloader.state {
-                    ProgressView(value: progress)
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                         .padding(.horizontal)
 
-                    if totalBytes > 0 {
-                        Text("\(Int(progress * 100))% • \(ByteCountFormatter.string(fromByteCount: bytesWritten, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))")
-                            .font(.caption.monospaced())
-                            .foregroundColor(.secondary)
-                    }
-                }
+                    HStack(spacing: 12) {
+                        Button("Cancel") {
+                            isHUDVisible = false
+                            errorMessage = nil
+                        }
+                        .buttonStyle(.bordered)
 
-                Button("Cancel") {
-                    downloader.cancel()
-                    isInstalling = false
+                        Button("Retry") {
+                            errorMessage = nil
+                            startInstallation()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    ProgressView()
+                        .scaleEffect(1.4)
+
+                    Text(installationStatus)
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+
+                    if case .downloading(let progress, let bytesWritten, let totalBytes) = downloader.state {
+                        ProgressView(value: progress)
+                            .padding(.horizontal)
+
+                        if totalBytes > 0 {
+                            Text("\(Int(progress * 100))% • \(ByteCountFormatter.string(fromByteCount: bytesWritten, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file))")
+                                .font(.caption.monospaced())
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Button("Cancel") {
+                        downloader.cancel()
+                        isHUDVisible = false
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
             .padding(24)
+            .frame(maxWidth: 320)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(16)
-            .shadow(radius: 20)
-            .padding(.horizontal, 32)
+            .cornerRadius(18)
+            .shadow(radius: 24)
         }
     }
 
     private func startInstallation() {
         guard let spec = selectedPreset.specs[architecture] else {
-            installationStatus = "Architecture not supported for \(selectedPreset.name)"
+            errorMessage = "Architecture not supported for \(selectedPreset.name)"
+            isHUDVisible = true
             return
         }
 
-        isInstalling = true
+        errorMessage = nil
+        isHUDVisible = true
         let vmId = UUID()
         let diskFilename = "rootfs.\(diskFormat.fileExtension)"
         let targetDiskURL = DiskManager.shared.diskURL(for: vmId, filename: diskFilename)
@@ -181,13 +216,12 @@ public struct NewVMWizardView: View {
                 format: diskFormat
             )
         } catch {
-            installationStatus = "Disk error: \(error.localizedDescription)"
-            isInstalling = false
+            errorMessage = "Disk error: \(error.localizedDescription)"
             return
         }
 
         if let kernelAsset = spec.kernelAsset {
-            installationStatus = "Downloading kernel..."
+            installationStatus = "Downloading Linux kernel..."
             let kernelDest = DiskManager.shared.diskURL(for: vmId, filename: kernelAsset.filename)
             downloader.download(from: kernelAsset.url, to: kernelDest) { result in
                 switch result {
@@ -196,27 +230,28 @@ public struct NewVMWizardView: View {
                         self.installationStatus = "Downloading initramfs..."
                         let initrdDest = DiskManager.shared.diskURL(for: vmId, filename: initrdAsset.filename)
                         self.downloader.download(from: initrdAsset.url, to: initrdDest) { initrdResult in
-                            if case .success = initrdResult {
+                            switch initrdResult {
+                            case .success:
                                 self.finalizeVM(vmId: vmId, spec: spec, kernelFile: kernelAsset.filename, initrdFile: initrdAsset.filename)
+                            case .failure(let err):
+                                self.errorMessage = "Initramfs failed: \(err.localizedDescription)"
                             }
                         }
                     } else {
                         self.finalizeVM(vmId: vmId, spec: spec, kernelFile: kernelAsset.filename, initrdFile: nil)
                     }
                 case .failure(let error):
-                    self.installationStatus = "Kernel failed: \(error.localizedDescription)"
-                    self.isInstalling = false
+                    self.errorMessage = "Kernel failed: \(error.localizedDescription)"
                 }
             }
         } else {
-            installationStatus = "Downloading cloud image..."
+            installationStatus = "Downloading disk image..."
             downloader.download(from: spec.diskAsset.url, to: targetDiskURL) { result in
                 switch result {
                 case .success:
                     self.finalizeVM(vmId: vmId, spec: spec, kernelFile: nil, initrdFile: nil)
                 case .failure(let error):
-                    self.installationStatus = "Image failed: \(error.localizedDescription)"
-                    self.isInstalling = false
+                    self.errorMessage = "Image download failed: \(error.localizedDescription)"
                 }
             }
         }
@@ -248,6 +283,7 @@ public struct NewVMWizardView: View {
             try? encoded.write(to: listURL)
         }
 
+        isHUDVisible = false
         onCreated(config)
         dismiss()
     }

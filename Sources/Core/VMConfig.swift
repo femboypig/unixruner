@@ -51,20 +51,20 @@ public struct VMConfig: Codable, Identifiable, Equatable, Hashable {
         self.updatedAt = updatedAt
     }
 
-    public var distroIcon: String {
+    public var distroImageName: String? {
         let lower = name.lowercased()
         if lower.contains("alpine") {
-            return "mountain.2.fill"
+            return "alpine"
         } else if lower.contains("debian") {
-            return "swirl.circle.righthalf.filled"
+            return "debian"
         } else if lower.contains("ubuntu") {
-            return "circle.circle.fill"
+            return "ubuntu"
         } else if lower.contains("arch") {
-            return "arrowtriangle.up.fill"
+            return "arch"
         } else if lower.contains("void") {
-            return "rhombus.fill"
+            return "void"
         } else {
-            return "terminal.fill"
+            return nil
         }
     }
 }
