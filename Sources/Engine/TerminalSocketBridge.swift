@@ -66,7 +66,7 @@ public final class TerminalSocketBridge {
 
                     let res = withUnsafePointer(to: &addr) { ptr in
                         ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
-                            connect(sock, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                            Darwin.connect(sock, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
                         }
                     }
 
