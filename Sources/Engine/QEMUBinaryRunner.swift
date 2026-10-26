@@ -71,8 +71,12 @@ public final class QEMUBinaryRunner {
             throw NSError(domain: "QEMUBinaryRunner", code: 5, userInfo: [NSLocalizedDescriptionKey: "QEMU runner not loaded"])
         }
 
-        // Enable JIT translation via ptrace self-attach if running without external debugger
-        _ = ptrace(0, 0, nil, 0) // PT_TRACE_ME = 0
+        // Enable JIT translation via dynamic ptrace self-attach if running without external debugger
+        typealias PtraceFunc = @convention(c) (Int32, Int32, UnsafeMutableRawPointer?, Int32) -> Int32
+        if let ptraceSym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "ptrace") {
+            let ptraceFn = unsafeBitCast(ptraceSym, to: PtraceFunc.self)
+            _ = ptraceFn(0, 0, nil, 0) // PT_TRACE_ME = 0
+        }
 
         // Intercept exit() calls from QEMU thread to prevent app termination
         let qemuThread = pthread_self()
