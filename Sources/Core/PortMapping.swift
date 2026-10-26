@@ -1,11 +1,11 @@
 import Foundation
 
-public enum TransportProtocol: String, Codable, CaseIterable {
+public enum TransportProtocol: String, Codable, CaseIterable, Hashable {
     case tcp
     case udp
 }
 
-public struct PortMapping: Codable, Identifiable, Equatable {
+public struct PortMapping: Codable, Identifiable, Equatable, Hashable {
     public var id: UUID
     public var name: String
     public var hostPort: UInt16

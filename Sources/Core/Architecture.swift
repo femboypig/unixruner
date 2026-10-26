@@ -1,6 +1,6 @@
 import Foundation
 
-public enum Architecture: String, Codable, CaseIterable, Identifiable {
+public enum Architecture: String, Codable, CaseIterable, Identifiable, Hashable {
     case arm64 = "arm64"
     case amd64 = "x86_64"
 

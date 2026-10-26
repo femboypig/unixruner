@@ -1,6 +1,6 @@
 import Foundation
 
-public enum DiskFormat: String, Codable, CaseIterable, Identifiable {
+public enum DiskFormat: String, Codable, CaseIterable, Identifiable, Hashable {
     case qcow2 = "qcow2"
     case raw = "raw"
 
