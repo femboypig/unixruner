@@ -1,8 +1,4 @@
 import SwiftUI
-import Core
-import Presets
-import Storage
-
 public struct NewVMWizardView: View {
     @Environment(\.dismiss) private var dismiss
 

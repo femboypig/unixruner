@@ -1,7 +1,5 @@
 import SwiftUI
 import UIKit
-import Storage
-
 public struct SettingsView: View {
     @State private var availableBytes: Int64 = 0
     @State private var usedBytes: Int64 = 0

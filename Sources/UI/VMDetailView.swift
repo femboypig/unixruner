@@ -1,8 +1,4 @@
 import SwiftUI
-import Core
-import Engine
-import Storage
-
 public struct VMDetailView: View {
     @ObservedObject var processManager = VMProcessManager.shared
     @State var vm: VMConfig
