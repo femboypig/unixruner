@@ -68,7 +68,9 @@ public struct NewVMWizardView: View {
                 vmName = newPreset.name
                 memoryMB = Double(newPreset.recommendedMemoryMB)
                 cpuCores = newPreset.recommendedCores
-                diskFormat = (newPreset.bootMethod == .cloudImage) ? .raw : .qcow2
+                if let spec = newPreset.specs[architecture] {
+                    diskFormat = spec.diskAsset.filename.hasSuffix(".qcow2") ? .qcow2 : .raw
+                }
             }
         }
     }
@@ -207,19 +209,30 @@ public struct NewVMWizardView: View {
         errorMessage = nil
         isHUDVisible = true
         let vmId = UUID()
-        let diskFilename = "rootfs.\(diskFormat.fileExtension)"
+
+        let isCloudImage = (spec.kernelAsset == nil)
+        let effectiveFormat: DiskFormat
+        if isCloudImage {
+            effectiveFormat = spec.diskAsset.filename.hasSuffix(".qcow2") ? .qcow2 : .raw
+        } else {
+            effectiveFormat = diskFormat
+        }
+
+        let diskFilename = "rootfs.\(effectiveFormat.fileExtension)"
         let targetDiskURL = DiskManager.shared.diskURL(for: vmId, filename: diskFilename)
 
-        installationStatus = "Allocating virtual disk..."
-        do {
-            try DiskManager.shared.allocateEmptyDisk(
-                at: targetDiskURL,
-                sizeBytes: Int64(diskSizeGB * 1024 * 1024 * 1024),
-                format: diskFormat
-            )
-        } catch {
-            errorMessage = "Disk error: \(error.localizedDescription)"
-            return
+        if !isCloudImage {
+            installationStatus = "Allocating virtual disk..."
+            do {
+                try DiskManager.shared.allocateEmptyDisk(
+                    at: targetDiskURL,
+                    sizeBytes: Int64(diskSizeGB * 1024 * 1024 * 1024),
+                    format: effectiveFormat
+                )
+            } catch {
+                errorMessage = "Disk error: \(error.localizedDescription)"
+                return
+            }
         }
 
         if let kernelAsset = spec.kernelAsset {
@@ -234,13 +247,13 @@ public struct NewVMWizardView: View {
                         self.downloader.download(from: initrdAsset.url, to: initrdDest) { initrdResult in
                             switch initrdResult {
                             case .success:
-                                self.finalizeVM(vmId: vmId, spec: spec, kernelFile: kernelAsset.filename, initrdFile: initrdAsset.filename)
+                                self.finalizeVM(vmId: vmId, spec: spec, format: effectiveFormat, kernelFile: kernelAsset.filename, initrdFile: initrdAsset.filename)
                             case .failure(let err):
                                 self.errorMessage = "Initramfs failed: \(err.localizedDescription)"
                             }
                         }
                     } else {
-                        self.finalizeVM(vmId: vmId, spec: spec, kernelFile: kernelAsset.filename, initrdFile: nil)
+                        self.finalizeVM(vmId: vmId, spec: spec, format: effectiveFormat, kernelFile: kernelAsset.filename, initrdFile: nil)
                     }
                 case .failure(let error):
                     self.errorMessage = "Kernel failed: \(error.localizedDescription)"
@@ -251,7 +264,7 @@ public struct NewVMWizardView: View {
             downloader.download(from: spec.diskAsset.url, to: targetDiskURL) { result in
                 switch result {
                 case .success:
-                    self.finalizeVM(vmId: vmId, spec: spec, kernelFile: nil, initrdFile: nil)
+                    self.finalizeVM(vmId: vmId, spec: spec, format: effectiveFormat, kernelFile: nil, initrdFile: nil)
                 case .failure(let error):
                     self.errorMessage = "Image download failed: \(error.localizedDescription)"
                 }
@@ -259,18 +272,18 @@ public struct NewVMWizardView: View {
         }
     }
 
-    private func finalizeVM(vmId: UUID, spec: DistroArchitectureSpec, kernelFile: String?, initrdFile: String?) {
+    private func finalizeVM(vmId: UUID, spec: DistroArchitectureSpec, format: DiskFormat, kernelFile: String?, initrdFile: String?) {
         let config = VMConfig(
             id: vmId,
             name: vmName,
             architecture: architecture,
-            diskFormat: diskFormat,
+            diskFormat: format,
             memoryMB: Int(memoryMB),
             cpuCores: cpuCores,
             diskSizeBytes: Int64(diskSizeGB * 1024 * 1024 * 1024),
             kernelRelativePath: kernelFile,
             initrdRelativePath: initrdFile,
-            diskRelativePath: "rootfs.\(diskFormat.fileExtension)",
+            diskRelativePath: "rootfs.\(format.fileExtension)",
             extraBootArgs: spec.defaultBootArgs
         )
 

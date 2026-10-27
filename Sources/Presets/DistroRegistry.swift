@@ -21,47 +21,31 @@ public final class DistroRegistry {
     public static let alpinePreset = DistroPreset(
         id: "alpine-standard",
         name: "Alpine Linux",
-        tag: "Recommended • 8 MB",
+        tag: "Recommended • 120 MB",
         summary: "Ultra-lightweight security-oriented Linux. Instant boot, minimal memory footprint.",
         packageManager: "apk",
         defaultUser: "root",
         defaultPassword: nil,
-        bootMethod: .directKernel,
+        bootMethod: .cloudImage,
         recommendedMemoryMB: 512,
         recommendedCores: 2,
         recommendedDiskBytes: 4 * 1024 * 1024 * 1024,
         specs: [
             .arm64: DistroArchitectureSpec(
                 architecture: .arm64,
-                kernelAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/netboot/vmlinuz-virt")!,
-                    filename: "vmlinuz-alpine-arm64"
-                ),
-                initrdAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/netboot/initramfs-virt")!,
-                    filename: "initramfs-alpine-arm64"
-                ),
                 diskAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/alpine-minirootfs-latest-aarch64.tar.gz")!,
-                    filename: "rootfs-alpine-arm64.tar.gz"
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/alpine-3.24.3-aarch64-tiny-r0.qcow2")!,
+                    filename: "alpine-3.24.3-aarch64-tiny-r0.qcow2"
                 ),
-                defaultBootArgs: "console=ttyAMA0 modules=loop,squashfs,virtio_blk,virtio_net"
+                defaultBootArgs: "console=ttyAMA0 root=/dev/vda2 rw"
             ),
             .amd64: DistroArchitectureSpec(
                 architecture: .amd64,
-                kernelAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/netboot/vmlinuz-virt")!,
-                    filename: "vmlinuz-alpine-amd64"
-                ),
-                initrdAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/netboot/initramfs-virt")!,
-                    filename: "initramfs-alpine-amd64"
-                ),
                 diskAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-latest-x86_64.tar.gz")!,
-                    filename: "rootfs-alpine-amd64.tar.gz"
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/alpine-3.24.3-x86_64-tiny-r0.qcow2")!,
+                    filename: "alpine-3.24.3-x86_64-tiny-r0.qcow2"
                 ),
-                defaultBootArgs: "console=ttyS0 modules=loop,squashfs,virtio_blk,virtio_net"
+                defaultBootArgs: "console=ttyS0 root=/dev/vda2 rw"
             )
         ]
     )

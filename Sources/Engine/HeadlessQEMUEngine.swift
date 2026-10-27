@@ -32,7 +32,12 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
 
         AppLogger.shared.log("Starting VM '\(config.name)' (arch: \(config.architecture.displayName), memory: \(config.memoryMB)MB)...", level: .engine)
         AppLogger.shared.log("Disk path: \(diskURL.path)", level: .engine)
-        if let k = kernelURL { AppLogger.shared.log("Kernel path: \(k.path)", level: .engine) }
+        var effectiveKernelURL: URL? = nil
+        if let k = kernelURL {
+            let prepared = KernelDecompressor.prepareKernelIfNeeded(at: k)
+            effectiveKernelURL = prepared
+            AppLogger.shared.log("Kernel path: \(prepared.path)", level: .engine)
+        }
         if let i = initrdURL { AppLogger.shared.log("Initrd path: \(i.path)", level: .engine) }
 
         updateState(.starting)
@@ -50,7 +55,7 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
         let args = QEMUArgumentsBuilder.build(
             config: config,
             diskURL: diskURL,
-            kernelURL: kernelURL,
+            kernelURL: effectiveKernelURL,
             initrdURL: initrdURL,
             sharedFolderURL: sharedDir,
             socketPort: consolePort
