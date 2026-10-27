@@ -71,6 +71,10 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
             if success {
                 AppLogger.shared.log("Socket bridge connected to QEMU on port \(consolePort)", level: .engine)
                 self.updateState(.running)
+                // Send Return character after connection so shell/login prompt is drawn
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                    self?.sendInput(Data([0x0D]))
+                }
             } else {
                 AppLogger.shared.log("Socket bridge timed out connecting to port \(consolePort)", level: .error)
                 let msg = "\r\n\u{001B}[1;31m[unixruner]\u{001B}[0m Terminal socket connection timed out on port \(consolePort).\r\n"

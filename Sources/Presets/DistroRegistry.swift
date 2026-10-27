@@ -8,9 +8,7 @@ public final class DistroRegistry {
         self.presets = [
             DistroRegistry.alpinePreset,
             DistroRegistry.debianPreset,
-            DistroRegistry.ubuntuPreset,
-            DistroRegistry.archPreset,
-            DistroRegistry.voidPreset
+            DistroRegistry.ubuntuPreset
         ]
     }
 

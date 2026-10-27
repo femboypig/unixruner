@@ -1,33 +1,19 @@
 import SwiftUI
 import UIKit
 import SwiftTerm
+
 public struct TerminalContainerView: View {
     @ObservedObject var processManager = VMProcessManager.shared
     @State private var isCtrlActive = false
     @State private var isAltActive = false
 
-    private let terminalView = SwiftTerm.TerminalView()
-
     public init() {}
 
     public var body: some View {
         VStack(spacing: 0) {
-            SwiftTermRepresentable(terminalView: terminalView, onSendInput: { data in
+            SwiftTermRepresentable(onSendInput: { data in
                 processManager.sendInput(data)
             })
-            .onAppear {
-                if !processManager.outputHistory.isEmpty {
-                    let bytes = [UInt8](processManager.outputHistory)
-                    terminalView.feed(byteArray: bytes[...])
-                }
-                processManager.onOutputReceived = { data in
-                    let bytes = [UInt8](data)
-                    terminalView.feed(byteArray: bytes[...])
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    terminalView.becomeFirstResponder()
-                }
-            }
 
             TerminalAccessoryBar(
                 isCtrlActive: $isCtrlActive,
@@ -42,6 +28,15 @@ public struct TerminalContainerView: View {
         }
         .navigationTitle(processManager.activeVMConfig?.name ?? "Terminal")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    processManager.sendInput(Data([0x0D])) // '\r'
+                } label: {
+                    Label("Send Enter", systemImage: "return")
+                }
+            }
+        }
         .toolbar(.hidden, for: .tabBar)
     }
 
@@ -81,24 +76,86 @@ public struct TerminalContainerView: View {
     }
 }
 
-public struct SwiftTermRepresentable: UIViewRepresentable {
-    public let terminalView: SwiftTerm.TerminalView
-    public let onSendInput: (Data) -> Void
+public final class TerminalHostView: UIView {
+    public let terminalView = SwiftTerm.TerminalView()
+    private var hasFedInitialHistory = false
 
-    public func makeUIView(context: Context) -> SwiftTerm.TerminalView {
-        terminalView.terminalDelegate = context.coordinator
-        terminalView.backgroundColor = .black
-        terminalView.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        return terminalView
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
     }
 
-    public func updateUIView(_ uiView: SwiftTerm.TerminalView, context: Context) {}
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        backgroundColor = .black
+        terminalView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(terminalView)
+        NSLayoutConstraint.activate([
+            terminalView.topAnchor.constraint(equalTo: topAnchor),
+            terminalView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            terminalView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            terminalView.trailingAnchor.constraint(equalTo: trailingAnchor)
+        ])
+        terminalView.backgroundColor = .black
+        terminalView.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    }
+
+    override public func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.width > 0 && bounds.height > 0 && !hasFedInitialHistory {
+            hasFedInitialHistory = true
+            feedHistoryNow()
+        }
+    }
+
+    public func feedHistoryNow() {
+        let history = VMProcessManager.shared.outputHistory
+        if !history.isEmpty {
+            let bytes = [UInt8](history)
+            terminalView.feed(byteArray: bytes[...])
+            AppLogger.shared.log("Fed \(bytes.count) bytes history to laid-out terminal (\(terminalView.getTerminal().cols)x\(terminalView.getTerminal().rows))", level: .engine)
+        }
+    }
+
+    public func feedData(_ data: Data) {
+        let bytes = [UInt8](data)
+        terminalView.feed(byteArray: bytes[...])
+    }
+}
+
+public struct SwiftTermRepresentable: UIViewRepresentable {
+    public let onSendInput: (Data) -> Void
+
+    public func makeUIView(context: Context) -> TerminalHostView {
+        let host = TerminalHostView()
+        host.terminalView.terminalDelegate = context.coordinator
+        context.coordinator.hostView = host
+
+        VMProcessManager.shared.onOutputReceived = { [weak host] data in
+            DispatchQueue.main.async {
+                host?.feedData(data)
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            host.terminalView.becomeFirstResponder()
+        }
+
+        return host
+    }
+
+    public func updateUIView(_ uiView: TerminalHostView, context: Context) {}
 
     public func makeCoordinator() -> Coordinator {
         Coordinator(onSendInput: onSendInput)
     }
 
     public class Coordinator: NSObject, TerminalViewDelegate {
+        weak var hostView: TerminalHostView?
         let onSendInput: (Data) -> Void
 
         init(onSendInput: @escaping (Data) -> Void) {
@@ -106,12 +163,15 @@ public struct SwiftTermRepresentable: UIViewRepresentable {
         }
 
         public func send(source: TerminalView, data: ArraySlice<UInt8>) {
+            AppLogger.shared.log("TerminalView key sent \(data.count) bytes", level: .engine)
             onSendInput(Data(data))
         }
 
         public func scrolled(source: TerminalView, position: Double) {}
         public func setTerminalTitle(source: TerminalView, title: String) {}
-        public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {}
+        public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+            AppLogger.shared.log("Terminal size changed: \(newCols)x\(newRows)", level: .engine)
+        }
         public func clipboardCopy(source: TerminalView, content: Data) {}
         public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
         public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}

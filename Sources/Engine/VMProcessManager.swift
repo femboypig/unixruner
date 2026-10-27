@@ -68,6 +68,7 @@ public final class VMProcessManager: ObservableObject, VMEngineDelegate {
             if self.outputHistory.count > 256 * 1024 {
                 self.outputHistory = self.outputHistory.suffix(128 * 1024)
             }
+            AppLogger.shared.log("VMProcessManager buffered \(data.count) bytes (total history: \(self.outputHistory.count) bytes)", level: .engine)
             self.onOutputReceived?(data)
         }
     }

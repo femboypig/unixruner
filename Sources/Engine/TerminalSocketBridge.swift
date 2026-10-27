@@ -72,6 +72,9 @@ public final class TerminalSocketBridge {
 
                     if res == 0 {
                         // Connection established with QEMU serial socket
+                        let flags = fcntl(sock, F_GETFL, 0)
+                        _ = fcntl(sock, F_SETFL, flags | O_NONBLOCK)
+
                         self.clientSocket = sock
                         self.isConnected = true
                         self.startReading(from: sock)
@@ -94,7 +97,8 @@ public final class TerminalSocketBridge {
         guard clientSocket >= 0, isConnected else { return }
         data.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
-            _ = send(clientSocket, base, data.count, 0)
+            let sent = send(clientSocket, base, data.count, 0)
+            AppLogger.shared.log("Terminal socket sent \(sent)/\(data.count) bytes", level: .engine)
         }
     }
 
@@ -119,11 +123,12 @@ public final class TerminalSocketBridge {
             let bytesRead = recv(socket, &buffer, buffer.count, 0)
             if bytesRead > 0 {
                 let data = Data(buffer.prefix(bytesRead))
+                AppLogger.shared.log("Terminal socket received \(bytesRead) bytes from QEMU", level: .engine)
                 DispatchQueue.main.async {
                     self.onOutput?(data)
                 }
             } else if bytesRead == 0 {
-                // Connection closed by peer
+                AppLogger.shared.log("Terminal socket disconnected by QEMU peer", level: .engine)
                 self.disconnect()
             }
         }
