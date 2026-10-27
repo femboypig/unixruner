@@ -7,6 +7,7 @@ public final class VMProcessManager: ObservableObject, VMEngineDelegate {
     @Published public private(set) var memoryWarningReceived = false
 
     public var onOutputReceived: ((Data) -> Void)?
+    public private(set) var outputHistory = Data()
 
     private var currentEngine: VMEngineProtocol?
     private var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
@@ -28,6 +29,7 @@ public final class VMProcessManager: ObservableObject, VMEngineDelegate {
         initrdURL: URL?
     ) throws {
         stop()
+        self.outputHistory.removeAll()
 
         self.activeVMConfig = config
         self.currentEngine = engine
@@ -62,6 +64,10 @@ public final class VMProcessManager: ObservableObject, VMEngineDelegate {
 
     public func vmEngine(_ engine: VMEngineProtocol, didReceiveOutput data: Data) {
         DispatchQueue.main.async {
+            self.outputHistory.append(data)
+            if self.outputHistory.count > 256 * 1024 {
+                self.outputHistory = self.outputHistory.suffix(128 * 1024)
+            }
             self.onOutputReceived?(data)
         }
     }

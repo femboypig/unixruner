@@ -19,7 +19,10 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
             sharedFolderEnabled: true
         )
 
-        let diskURL = URL(fileURLWithPath: "/tmp/rootfs.qcow2")
+        let diskURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test_rootfs.qcow2")
+        FileManager.default.createFile(atPath: diskURL.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: diskURL) }
+
         let kernelURL = URL(fileURLWithPath: "/tmp/vmlinuz")
         let initrdURL = URL(fileURLWithPath: "/tmp/initrd")
         let sharedURL = URL(fileURLWithPath: "/tmp/shared")
@@ -55,6 +58,12 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("-serial"))
         XCTAssertTrue(args.contains("chardev:term0"))
         XCTAssertTrue(args.contains("socket,id=term0,host=127.0.0.1,port=54321,server=on,wait=off"))
+
+        // Compliant VirtIO block device
+        XCTAssertTrue(args.contains("virtio-blk-pci,drive=drive0"))
+        let driveArg = args.first(where: { $0.starts(with: "file=") })
+        XCTAssertNotNil(driveArg)
+        XCTAssertTrue(driveArg!.contains("if=none,id=drive0"))
 
         // Port forwarding
         let netdevArg = args.first(where: { $0.starts(with: "user,id=net0") })

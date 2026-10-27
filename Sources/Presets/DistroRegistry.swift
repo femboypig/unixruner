@@ -47,7 +47,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/alpine-minirootfs-latest-aarch64.tar.gz")!,
                     filename: "rootfs-alpine-arm64.tar.gz"
                 ),
-                defaultBootArgs: "console=ttyAMA0 modules=loop,squashfs,virtio_blk,virtio_net quiet"
+                defaultBootArgs: "console=ttyAMA0 modules=loop,squashfs,virtio_blk,virtio_net"
             ),
             .amd64: DistroArchitectureSpec(
                 architecture: .amd64,
@@ -63,7 +63,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-latest-x86_64.tar.gz")!,
                     filename: "rootfs-alpine-amd64.tar.gz"
                 ),
-                defaultBootArgs: "console=ttyS0 modules=loop,squashfs,virtio_blk,virtio_net quiet"
+                defaultBootArgs: "console=ttyS0 modules=loop,squashfs,virtio_blk,virtio_net"
             )
         ]
     )
@@ -87,7 +87,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.raw")!,
                     filename: "debian-12-cloud-arm64.raw"
                 ),
-                defaultBootArgs: "console=ttyAMA0 root=/dev/vda1 rw quiet"
+                defaultBootArgs: "console=ttyAMA0 root=/dev/vda1 rw"
             ),
             .amd64: DistroArchitectureSpec(
                 architecture: .amd64,
@@ -95,7 +95,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.raw")!,
                     filename: "debian-12-cloud-amd64.raw"
                 ),
-                defaultBootArgs: "console=ttyS0 root=/dev/vda1 rw quiet"
+                defaultBootArgs: "console=ttyS0 root=/dev/vda1 rw"
             )
         ]
     )
@@ -119,7 +119,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-arm64.img")!,
                     filename: "ubuntu-24.04-minimal-arm64.img"
                 ),
-                defaultBootArgs: "console=ttyAMA0 root=/dev/vda1 rw quiet"
+                defaultBootArgs: "console=ttyAMA0 root=/dev/vda1 rw"
             ),
             .amd64: DistroArchitectureSpec(
                 architecture: .amd64,
@@ -127,7 +127,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img")!,
                     filename: "ubuntu-24.04-minimal-amd64.img"
                 ),
-                defaultBootArgs: "console=ttyS0 root=/dev/vda1 rw quiet"
+                defaultBootArgs: "console=ttyS0 root=/dev/vda1 rw"
             )
         ]
     )
@@ -151,7 +151,7 @@ public final class DistroRegistry {
                     url: URL(string: "http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz")!,
                     filename: "archlinuxarm-aarch64-latest.tar.gz"
                 ),
-                defaultBootArgs: "console=ttyAMA0 root=/dev/vda rw quiet"
+                defaultBootArgs: "console=ttyAMA0 root=/dev/vda rw"
             )
         ]
     )
@@ -175,7 +175,7 @@ public final class DistroRegistry {
                     url: URL(string: "https://repo-default.voidlinux.org/live/current/void-aarch64-musl-ROOTFS.tar.xz")!,
                     filename: "void-aarch64-musl-ROOTFS.tar.xz"
                 ),
-                defaultBootArgs: "console=ttyAMA0 root=/dev/vda rw quiet"
+                defaultBootArgs: "console=ttyAMA0 root=/dev/vda rw"
             )
         ]
     )

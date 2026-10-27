@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 public final class QEMUBinaryRunner {
-    private typealias QemuInitFunc = @convention(c) (Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?) -> Int32
+    private typealias QemuInitFunc = @convention(c) (Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?) -> Void
     private typealias QemuMainLoopFunc = @convention(c) () -> Void
     private typealias QemuCleanupFunc = @convention(c) () -> Void
 
@@ -11,6 +11,9 @@ public final class QEMUBinaryRunner {
     private var qemu_init: QemuInitFunc?
     private var qemu_main_loop: QemuMainLoopFunc?
     private var qemu_cleanup: QemuCleanupFunc?
+
+    private var allocatedArgs: [UnsafeMutablePointer<CChar>] = []
+    private var allocatedEnv: [UnsafeMutablePointer<CChar>] = []
 
     public init() {}
 
@@ -23,7 +26,7 @@ public final class QEMUBinaryRunner {
             throw NSError(domain: "QEMUBinaryRunner", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bundle Frameworks directory not found"])
         }
 
-        // Preload core supporting frameworks with RTLD_GLOBAL so QEMU symbols resolve cleanly
+        // Preload core supporting frameworks with RTLD_LOCAL so QEMU dependencies resolve cleanly
         let preloads = [
             "ffi.8", "intl.8", "iconv.2",
             "glib-2.0.0", "gmodule-2.0.0", "gobject-2.0.0", "gthread-2.0.0", "gio-2.0.0",
@@ -33,7 +36,7 @@ public final class QEMUBinaryRunner {
         for name in preloads {
             let fwPath = frameworksURL.appendingPathComponent("\(name).framework/\(name)").path
             if FileManager.default.fileExists(atPath: fwPath) {
-                if let h = dlopen(fwPath, RTLD_NOW | RTLD_GLOBAL) {
+                if let h = dlopen(fwPath, RTLD_LOCAL | RTLD_LAZY) {
                     supportingHandles.append(h)
                 }
             }
@@ -46,7 +49,7 @@ public final class QEMUBinaryRunner {
             throw NSError(domain: "QEMUBinaryRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: "QEMU binary framework missing at \(frameworkURL.path)"])
         }
 
-        guard let handle = dlopen(frameworkURL.path, RTLD_NOW | RTLD_GLOBAL) else {
+        guard let handle = dlopen(frameworkURL.path, RTLD_LOCAL | RTLD_LAZY | RTLD_FIRST) else {
             let err = dlerror().map { String(cString: $0) } ?? "unknown error"
             throw NSError(domain: "QEMUBinaryRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: "dlopen failed: \(err)"])
         }
@@ -71,13 +74,6 @@ public final class QEMUBinaryRunner {
             throw NSError(domain: "QEMUBinaryRunner", code: 5, userInfo: [NSLocalizedDescriptionKey: "QEMU runner not loaded"])
         }
 
-        // Enable JIT translation via dynamic ptrace self-attach if running without external debugger
-        typealias PtraceFunc = @convention(c) (Int32, Int32, UnsafeMutableRawPointer?, Int32) -> Int32
-        if let ptraceSym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "ptrace") {
-            let ptraceFn = unsafeBitCast(ptraceSym, to: PtraceFunc.self)
-            _ = ptraceFn(0, 0, nil, 0) // PT_TRACE_ME = 0
-        }
-
         // Intercept exit() calls from QEMU thread to prevent app termination
         let qemuThread = pthread_self()
         _ = atexit_b {
@@ -91,16 +87,22 @@ public final class QEMUBinaryRunner {
         let hasPipe = pipe(&pipeFDs) == 0
         let savedStderr = dup(STDERR_FILENO)
         if hasPipe {
+            let flags = fcntl(pipeFDs[0], F_GETFL, 0)
+            _ = fcntl(pipeFDs[0], F_SETFL, flags | O_NONBLOCK)
             dup2(pipeFDs[1], STDERR_FILENO)
             close(pipeFDs[1])
         }
 
-        // Build valid argv
-        let cArgs = arguments.map { strdup($0) }
+        // Clean any leftover strings from previous runs
+        cleanAllocatedStrings()
+
+        // Build valid argv that remains in memory for the lifetime of QEMU execution
+        let cArgs = arguments.map { strdup($0)! }
+        allocatedArgs = cArgs
         var argv: [UnsafePointer<CChar>?] = cArgs.map { UnsafePointer($0) }
         argv.append(nil)
 
-        // Build valid, non-null envp from environment
+        // Build valid, non-null envp that remains in memory for the lifetime of QEMU execution
         var envEntries: [String] = []
         for (k, v) in ProcessInfo.processInfo.environment {
             envEntries.append("\(k)=\(v)")
@@ -108,20 +110,18 @@ public final class QEMUBinaryRunner {
         if !envEntries.contains(where: { $0.hasPrefix("QEMU_AUDIO_DRV=") }) {
             envEntries.append("QEMU_AUDIO_DRV=none")
         }
-        let cEnv = envEntries.map { strdup($0) }
+        let cEnv = envEntries.map { strdup($0)! }
+        allocatedEnv = cEnv
         var envp: [UnsafePointer<CChar>?] = cEnv.map { UnsafePointer($0) }
         envp.append(nil)
 
         let argc = Int32(arguments.count)
 
-        let initResult = argv.withUnsafeBufferPointer { argvBuf in
+        argv.withUnsafeBufferPointer { argvBuf in
             envp.withUnsafeBufferPointer { envpBuf in
                 qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
             }
         }
-
-        for ptr in cArgs { free(ptr) }
-        for ptr in cEnv { free(ptr) }
 
         if hasPipe {
             dup2(savedStderr, STDERR_FILENO)
@@ -137,15 +137,15 @@ public final class QEMUBinaryRunner {
             }
         }
 
-        guard initResult == 0 else {
-            throw NSError(domain: "QEMUBinaryRunner", code: Int(initResult), userInfo: [NSLocalizedDescriptionKey: "qemu_init returned non-zero exit code \(initResult)"])
-        }
-
         qemu_main_loop()
         qemu_cleanup()
+
+        cleanAllocatedStrings()
     }
 
     public func unload() {
+        cleanAllocatedStrings()
+
         if let h = handle {
             dlclose(h)
             handle = nil
@@ -158,5 +158,12 @@ public final class QEMUBinaryRunner {
         qemu_init = nil
         qemu_main_loop = nil
         qemu_cleanup = nil
+    }
+
+    private func cleanAllocatedStrings() {
+        for ptr in allocatedArgs { free(ptr) }
+        allocatedArgs.removeAll()
+        for ptr in allocatedEnv { free(ptr) }
+        allocatedEnv.removeAll()
     }
 }

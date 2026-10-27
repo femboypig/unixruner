@@ -16,9 +16,16 @@ public struct TerminalContainerView: View {
                 processManager.sendInput(data)
             })
             .onAppear {
+                if !processManager.outputHistory.isEmpty {
+                    let bytes = [UInt8](processManager.outputHistory)
+                    terminalView.feed(byteArray: bytes[...])
+                }
                 processManager.onOutputReceived = { data in
                     let bytes = [UInt8](data)
                     terminalView.feed(byteArray: bytes[...])
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    terminalView.becomeFirstResponder()
                 }
             }
 

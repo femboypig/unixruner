@@ -49,8 +49,9 @@ public struct QEMUArgumentsBuilder {
 
         // Storage Drive
         if FileManager.default.fileExists(atPath: diskURL.path) {
-            let driveArg = "file=\(diskURL.path),format=\(config.diskFormat.qemuDriver),if=virtio,cache=writethrough,id=drive0"
+            let driveArg = "file=\(diskURL.path),if=none,id=drive0,format=\(config.diskFormat.qemuDriver),cache=writethrough"
             args.append(contentsOf: ["-drive", driveArg])
+            args.append(contentsOf: ["-device", "virtio-blk-pci,drive=drive0"])
         }
 
         // User-mode networking (SLIRP) with port forwarding

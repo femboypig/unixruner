@@ -47,7 +47,7 @@ public final class TerminalSocketBridge {
         return 4444
     }
 
-    public func connect(port: UInt16, maxAttempts: Int = 100, intervalSeconds: TimeInterval = 0.05, completion: @escaping (Bool) -> Void) {
+    public func connect(port: UInt16, maxAttempts: Int = 300, intervalSeconds: TimeInterval = 0.05, completion: @escaping (Bool) -> Void) {
         isCancelled = false
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self = self else { return }
@@ -105,9 +105,7 @@ public final class TerminalSocketBridge {
         if let source = readSource {
             source.cancel()
             readSource = nil
-        }
-
-        if clientSocket >= 0 {
+        } else if clientSocket >= 0 {
             close(clientSocket)
             clientSocket = -1
         }
@@ -130,8 +128,9 @@ public final class TerminalSocketBridge {
             }
         }
 
-        source.setCancelHandler {
+        source.setCancelHandler { [weak self] in
             close(socket)
+            self?.clientSocket = -1
         }
 
         self.readSource = source
