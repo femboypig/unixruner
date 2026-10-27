@@ -53,7 +53,7 @@ public struct NewVMWizardView: View {
 
     private var presetSection: some View {
         Section("Distribution") {
-            Picker(selection: $selectedPreset) {
+            Picker("Distribution", selection: $selectedPreset) {
                 ForEach(DistroRegistry.shared.presets) { preset in
                     Label {
                         Text(preset.name)
@@ -61,14 +61,6 @@ public struct NewVMWizardView: View {
                         DistroLogoView(imageName: preset.id.components(separatedBy: "-").first, size: 20)
                     }
                     .tag(preset)
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Text("Distribution")
-                    Spacer()
-                    DistroLogoView(imageName: selectedPreset.id.components(separatedBy: "-").first, size: 22)
-                    Text(selectedPreset.name)
-                        .foregroundColor(.secondary)
                 }
             }
             .pickerStyle(.menu)

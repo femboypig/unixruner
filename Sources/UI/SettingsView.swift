@@ -1,9 +1,13 @@
 import SwiftUI
 import UIKit
+
 public struct SettingsView: View {
     @State private var availableBytes: Int64 = 0
     @State private var usedBytes: Int64 = 0
     @State private var showingCacheCleanedAlert = false
+    @State private var showingLogsSheet = false
+    @State private var showingLogsClearedAlert = false
+    @State private var logContent = ""
 
     @AppStorage("defaultArchitecture") private var defaultArchRaw: String = "arm64"
     @AppStorage("defaultMemoryMB") private var defaultMemoryMB: Int = 1024
@@ -18,13 +22,22 @@ public struct SettingsView: View {
                 filesystemSection
                 defaultsSection
                 terminalSection
+                diagnosticsSection
             }
             .navigationTitle("Settings")
             .onAppear(perform: calculateSpace)
+            .sheet(isPresented: $showingLogsSheet) {
+                logsSheetView
+            }
             .alert("Cache Cleared", isPresented: $showingCacheCleanedAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("Temporary download cache has been cleaned.")
+            }
+            .alert("Logs Cleared", isPresented: $showingLogsClearedAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Developer diagnostic log file has been cleared.")
             }
         }
     }
@@ -83,6 +96,53 @@ public struct SettingsView: View {
                 Text("Medium (13pt)").tag(13.0)
                 Text("Large (15pt)").tag(15.0)
                 Text("Extra Large (17pt)").tag(17.0)
+            }
+        }
+    }
+
+    private var diagnosticsSection: some View {
+        Section("Diagnostics & Developer Logs") {
+            Button {
+                logContent = AppLogger.shared.readRecentLogs()
+                showingLogsSheet = true
+            } label: {
+                Label("View Developer Logs", systemImage: "doc.text.magnifyingglass")
+            }
+
+            ShareLink(item: AppLogger.shared.logFileURL) {
+                Label("Export Developer Logs", systemImage: "square.and.arrow.up")
+            }
+
+            Button(role: .destructive) {
+                AppLogger.shared.clear()
+                showingLogsClearedAlert = true
+            } label: {
+                Label("Clear Logs", systemImage: "trash")
+            }
+        }
+    }
+
+    private var logsSheetView: some View {
+        NavigationStack {
+            ScrollView {
+                Text(logContent)
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle("Developer Logs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") {
+                        showingLogsSheet = false
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: AppLogger.shared.logFileURL) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
             }
         }
     }

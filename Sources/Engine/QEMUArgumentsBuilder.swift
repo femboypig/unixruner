@@ -72,12 +72,21 @@ public struct QEMUArgumentsBuilder {
         // Direct Kernel Boot (bypasses UEFI, cold boot in 1-2 sec)
         if let kernel = kernelURL, FileManager.default.fileExists(atPath: kernel.path) {
             args.append(contentsOf: ["-kernel", kernel.path])
-        }
-        if let initrd = initrdURL, FileManager.default.fileExists(atPath: initrd.path) {
-            args.append(contentsOf: ["-initrd", initrd.path])
-        }
-        if !config.extraBootArgs.isEmpty {
-            args.append(contentsOf: ["-append", config.extraBootArgs])
+            if let initrd = initrdURL, FileManager.default.fileExists(atPath: initrd.path) {
+                args.append(contentsOf: ["-initrd", initrd.path])
+            }
+            if !config.extraBootArgs.isEmpty {
+                args.append(contentsOf: ["-append", config.extraBootArgs])
+            }
+        } else {
+            // Firmware/BIOS boot for cloud disk images (Debian, Ubuntu, etc.)
+            if let romDir = Bundle.main.resourceURL?.appendingPathComponent("qemu") {
+                let efiName = (config.architecture == .arm64) ? "edk2-aarch64-code.fd" : "bios-256k.bin"
+                let efiURL = romDir.appendingPathComponent(efiName)
+                if FileManager.default.fileExists(atPath: efiURL.path) {
+                    args.append(contentsOf: ["-bios", efiURL.path])
+                }
+            }
         }
 
         return args

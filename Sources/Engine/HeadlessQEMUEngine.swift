@@ -14,9 +14,15 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
     public func start(with config: VMConfig, diskURL: URL, kernelURL: URL?, initrdURL: URL?) throws {
         guard state == .stopped || state == .terminated(exitCode: 0) else { return }
 
+        AppLogger.shared.log("Starting VM '\(config.name)' (arch: \(config.architecture.displayName), memory: \(config.memoryMB)MB)...", level: .engine)
+        AppLogger.shared.log("Disk path: \(diskURL.path)", level: .engine)
+        if let k = kernelURL { AppLogger.shared.log("Kernel path: \(k.path)", level: .engine) }
+        if let i = initrdURL { AppLogger.shared.log("Initrd path: \(i.path)", level: .engine) }
+
         updateState(.starting)
 
         let consolePort = TerminalSocketBridge.findAvailablePort()
+        AppLogger.shared.log("Selected console port: \(consolePort)", level: .engine)
 
         socketBridge.onOutput = { [weak self] data in
             guard let self = self else { return }
@@ -47,7 +53,16 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
         socketBridge.connect(port: consolePort) { [weak self] success in
             guard let self = self else { return }
             if success {
+                AppLogger.shared.log("Socket bridge connected to QEMU on port \(consolePort)", level: .engine)
                 self.updateState(.running)
+            } else {
+                AppLogger.shared.log("Socket bridge timed out connecting to port \(consolePort)", level: .error)
+                let msg = "\r\n\u{001B}[1;31m[unixruner]\u{001B}[0m Terminal socket connection timed out on port \(consolePort).\r\n"
+                if let data = msg.data(using: .utf8) {
+                    DispatchQueue.main.async {
+                        self.delegate?.vmEngine(self, didReceiveOutput: data)
+                    }
+                }
             }
         }
     }
@@ -93,6 +108,7 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
                 self.updateState(.terminated(exitCode: 0))
             }
         } catch {
+            AppLogger.shared.log("QEMU launch failed: \(error.localizedDescription)", level: .error)
             let errorMsg = """
             \r\n\u{001B}[1;31m[unixruner error]\u{001B}[0m QEMU engine launch failed:
             \(error.localizedDescription)

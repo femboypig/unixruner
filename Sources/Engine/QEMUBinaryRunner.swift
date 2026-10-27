@@ -14,6 +14,7 @@ public final class QEMUBinaryRunner {
 
     private var allocatedArgs: [UnsafeMutablePointer<CChar>] = []
     private var allocatedEnv: [UnsafeMutablePointer<CChar>] = []
+    private var childPID: pid_t = -1
 
     public init() {}
 
@@ -23,10 +24,14 @@ public final class QEMUBinaryRunner {
 
     public func load(for architecture: Architecture) throws {
         guard let frameworksURL = Bundle.main.privateFrameworksURL else {
-            throw NSError(domain: "QEMUBinaryRunner", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bundle Frameworks directory not found"])
+            let msg = "Bundle Frameworks directory not found"
+            AppLogger.shared.log(msg, level: .error)
+            throw NSError(domain: "QEMUBinaryRunner", code: 1, userInfo: [NSLocalizedDescriptionKey: msg])
         }
 
-        // Preload core supporting frameworks with RTLD_LOCAL so QEMU dependencies resolve cleanly
+        AppLogger.shared.log("Loading QEMU runtime for \(architecture.displayName)...", level: .engine)
+
+        // Preload core supporting frameworks with RTLD_LOCAL so dependencies resolve cleanly
         let preloads = [
             "ffi.8", "intl.8", "iconv.2",
             "glib-2.0.0", "gmodule-2.0.0", "gobject-2.0.0", "gthread-2.0.0", "gio-2.0.0",
@@ -38,6 +43,9 @@ public final class QEMUBinaryRunner {
             if FileManager.default.fileExists(atPath: fwPath) {
                 if let h = dlopen(fwPath, RTLD_LOCAL | RTLD_LAZY) {
                     supportingHandles.append(h)
+                } else {
+                    let err = dlerror().map { String(cString: $0) } ?? "unknown"
+                    AppLogger.shared.log("Optional preload \(name) skipped: \(err)", level: .warn)
                 }
             }
         }
@@ -46,12 +54,16 @@ public final class QEMUBinaryRunner {
         let frameworkURL = frameworksURL.appendingPathComponent("\(frameworkName).framework/\(frameworkName)")
 
         guard FileManager.default.fileExists(atPath: frameworkURL.path) else {
-            throw NSError(domain: "QEMUBinaryRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: "QEMU binary framework missing at \(frameworkURL.path)"])
+            let msg = "QEMU binary framework missing at \(frameworkURL.path)"
+            AppLogger.shared.log(msg, level: .error)
+            throw NSError(domain: "QEMUBinaryRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: msg])
         }
 
         guard let handle = dlopen(frameworkURL.path, RTLD_LOCAL | RTLD_LAZY | RTLD_FIRST) else {
             let err = dlerror().map { String(cString: $0) } ?? "unknown error"
-            throw NSError(domain: "QEMUBinaryRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: "dlopen failed: \(err)"])
+            let msg = "dlopen failed for \(frameworkName): \(err)"
+            AppLogger.shared.log(msg, level: .error)
+            throw NSError(domain: "QEMUBinaryRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: msg])
         }
         self.handle = handle
 
@@ -59,38 +71,54 @@ public final class QEMUBinaryRunner {
               let loopSym = dlsym(handle, "qemu_main_loop"),
               let cleanSym = dlsym(handle, "qemu_cleanup") else {
             let err = dlerror().map { String(cString: $0) } ?? "missing entry symbols"
-            throw NSError(domain: "QEMUBinaryRunner", code: 4, userInfo: [NSLocalizedDescriptionKey: "dlsym failed: \(err)"])
+            let msg = "dlsym failed: \(err)"
+            AppLogger.shared.log(msg, level: .error)
+            throw NSError(domain: "QEMUBinaryRunner", code: 4, userInfo: [NSLocalizedDescriptionKey: msg])
         }
 
         self.qemu_init = unsafeBitCast(initSym, to: QemuInitFunc.self)
         self.qemu_main_loop = unsafeBitCast(loopSym, to: QemuMainLoopFunc.self)
         self.qemu_cleanup = unsafeBitCast(cleanSym, to: QemuCleanupFunc.self)
+
+        AppLogger.shared.log("QEMU entry symbols resolved successfully.", level: .engine)
     }
 
     public func run(arguments: [String], onStdErr: ((String) -> Void)? = nil) throws {
         guard let qemu_init = qemu_init,
               let qemu_main_loop = qemu_main_loop,
               let qemu_cleanup = qemu_cleanup else {
-            throw NSError(domain: "QEMUBinaryRunner", code: 5, userInfo: [NSLocalizedDescriptionKey: "QEMU runner not loaded"])
+            let msg = "QEMU runner not loaded"
+            AppLogger.shared.log(msg, level: .error)
+            throw NSError(domain: "QEMUBinaryRunner", code: 5, userInfo: [NSLocalizedDescriptionKey: msg])
         }
 
-        // Intercept exit() calls from QEMU thread to prevent app termination
-        let qemuThread = pthread_self()
-        _ = atexit_b {
-            if pthread_equal(pthread_self(), qemuThread) != 0 {
-                pthread_exit(nil)
-            }
-        }
+        AppLogger.shared.log("QEMU arguments:\n\(arguments.joined(separator: " "))", level: .engine)
 
-        // Set up stderr pipe capture so diagnostic failures are recorded
+        // Set up real-time concurrent stderr pipe capture
         var pipeFDs = [Int32](repeating: 0, count: 2)
         let hasPipe = pipe(&pipeFDs) == 0
         let savedStderr = dup(STDERR_FILENO)
+
+        var readSource: DispatchSourceRead?
         if hasPipe {
             let flags = fcntl(pipeFDs[0], F_GETFL, 0)
             _ = fcntl(pipeFDs[0], F_SETFL, flags | O_NONBLOCK)
             dup2(pipeFDs[1], STDERR_FILENO)
             close(pipeFDs[1])
+
+            let source = DispatchSource.makeReadSource(fileDescriptor: pipeFDs[0], queue: DispatchQueue.global(qos: .userInteractive))
+            source.setEventHandler {
+                var buf = [UInt8](repeating: 0, count: 4096)
+                let n = read(pipeFDs[0], &buf, buf.count - 1)
+                if n > 0 {
+                    buf[n] = 0
+                    let str = String(cString: buf)
+                    AppLogger.shared.log(str, level: .qemu)
+                    onStdErr?(str)
+                }
+            }
+            readSource = source
+            source.resume()
         }
 
         // Clean any leftover strings from previous runs
@@ -117,33 +145,66 @@ public final class QEMUBinaryRunner {
 
         let argc = Int32(arguments.count)
 
-        argv.withUnsafeBufferPointer { argvBuf in
-            envp.withUnsafeBufferPointer { envpBuf in
-                qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
+        // Attempt process isolation via fork() to prevent any QEMU abort from killing host UI
+        let pid = fork()
+        if pid == 0 {
+            // --- CHILD PROCESS ---
+            argv.withUnsafeBufferPointer { argvBuf in
+                envp.withUnsafeBufferPointer { envpBuf in
+                    qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
+                }
             }
+            qemu_main_loop()
+            qemu_cleanup()
+            _exit(0)
+        } else if pid > 0 {
+            // --- PARENT PROCESS ---
+            self.childPID = pid
+            AppLogger.shared.log("QEMU child process spawned with PID \(pid)", level: .engine)
+
+            var status: Int32 = 0
+            waitpid(pid, &status, 0)
+            self.childPID = -1
+
+            let exitCode = (status >> 8) & 0xFF
+            AppLogger.shared.log("QEMU child process terminated with exit code \(exitCode) (raw status: \(status))", level: .engine)
+        } else {
+            // --- IN-PROCESS FALLBACK (if fork restricted) ---
+            AppLogger.shared.log("fork() returned \(errno); running QEMU in worker thread...", level: .warn)
+
+            let qemuThread = pthread_self()
+            _ = atexit_b {
+                if pthread_equal(pthread_self(), qemuThread) != 0 {
+                    pthread_exit(nil)
+                }
+            }
+
+            argv.withUnsafeBufferPointer { argvBuf in
+                envp.withUnsafeBufferPointer { envpBuf in
+                    qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
+                }
+            }
+            qemu_main_loop()
+            qemu_cleanup()
         }
 
         if hasPipe {
             dup2(savedStderr, STDERR_FILENO)
             close(savedStderr)
 
-            var buf = [UInt8](repeating: 0, count: 4096)
-            let n = read(pipeFDs[0], &buf, buf.count - 1)
+            readSource?.cancel()
             close(pipeFDs[0])
-            if n > 0 {
-                buf[n] = 0
-                let errString = String(cString: buf)
-                onStdErr?(errString)
-            }
         }
-
-        qemu_main_loop()
-        qemu_cleanup()
 
         cleanAllocatedStrings()
     }
 
     public func unload() {
+        if childPID > 0 {
+            kill(childPID, SIGTERM)
+            childPID = -1
+        }
+
         cleanAllocatedStrings()
 
         if let h = handle {
