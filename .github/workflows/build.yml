@@ -96,6 +96,11 @@ jobs:
         run: |
           mkdir -p build/Payload
           cp -R build/DerivedData/Build/Products/Release-iphoneos/unixruner.app build/Payload/
+          echo "Ad-hoc codesigning frameworks and app bundle with JIT entitlements..."
+          for fw in build/Payload/unixruner.app/Frameworks/*.framework; do
+            codesign -s - --force "$fw" 2>/dev/null || true
+          done
+          codesign -s - --force --entitlements Configuration/unixruner.entitlements build/Payload/unixruner.app
           cd build
           zip -r unixruner-unsigned.ipa Payload
           cd ..

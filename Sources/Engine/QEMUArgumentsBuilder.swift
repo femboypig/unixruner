@@ -26,8 +26,9 @@ public struct QEMUArgumentsBuilder {
         }
 
         // TCG JIT Accelerator tuning
-        // Setting tb-size to 128MB keeps JIT cache lean and prevents Jetsam memory kills on iOS
-        args.append(contentsOf: ["-accel", "tcg,tb-size=128"])
+        // Setting tb-size to 128MB keeps JIT cache lean and prevents Jetsam memory kills on iOS.
+        // split-wx=on enables dual mirror mapping (RW + RX) via mach_vm_remap, bypassing iOS kernel W^X restrictions!
+        args.append(contentsOf: ["-accel", "tcg,tb-size=128,split-wx=on"])
 
         // Hardware allocation
         args.append(contentsOf: ["-smp", "\(config.cpuCores)"])

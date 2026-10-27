@@ -8,11 +8,27 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
     private let qemuRunner = QEMUBinaryRunner()
     private var vmThread: Thread?
     private var isTerminating = false
+    private static var hasExecutedInProcess = false
 
     public init() {}
 
     public func start(with config: VMConfig, diskURL: URL, kernelURL: URL?, initrdURL: URL?) throws {
         guard state == .stopped || state == .terminated(exitCode: 0) else { return }
+
+        if Self.hasExecutedInProcess {
+            let warnMsg = "\r\n\u{001B}[1;33m[unixruner]\u{001B}[0m iOS architecture requires restarting the app between VM runs to clear QEMU static memory state.\r\nPlease swipe up from App Switcher and relaunch unixruner to start the machine again.\r\n"
+            AppLogger.shared.log("Attempted second QEMU launch in same process; blocked to prevent dirty static memory crash.", level: .warn)
+            if let data = warnMsg.data(using: .utf8) {
+                DispatchQueue.main.async {
+                    self.delegate?.vmEngine(self, didReceiveOutput: data)
+                }
+            }
+            updateState(.stopped)
+            return
+        }
+        Self.hasExecutedInProcess = true
+
+        Self.enableJITIfNeeded()
 
         AppLogger.shared.log("Starting VM '\(config.name)' (arch: \(config.architecture.displayName), memory: \(config.memoryMB)MB)...", level: .engine)
         AppLogger.shared.log("Disk path: \(diskURL.path)", level: .engine)
@@ -129,6 +145,15 @@ public final class HeadlessQEMUEngine: VMEngineProtocol {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.delegate?.vmEngine(self, didChangeState: newState)
+        }
+    }
+
+    private static func enableJITIfNeeded() {
+        typealias PtraceFunc = @convention(c) (Int32, pid_t, UnsafeMutableRawPointer?, Int32) -> Int32
+        if let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "ptrace") {
+            let ptrace = unsafeBitCast(sym, to: PtraceFunc.self)
+            let res = ptrace(0, 0, nil, 0)
+            AppLogger.shared.log("JIT ptrace(PT_TRACE_ME) initialized (result: \(res))", level: .engine)
         }
     }
 }

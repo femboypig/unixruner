@@ -48,7 +48,7 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("cortex-a57"))
 
         // TCG accelerator
-        XCTAssertTrue(args.contains("tcg,tb-size=128"))
+        XCTAssertTrue(args.contains("tcg,tb-size=128,split-wx=on"))
 
         // Hardware sizing
         XCTAssertTrue(args.contains("1024M"))
