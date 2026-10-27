@@ -117,7 +117,7 @@ public final class TerminalHostView: UIView {
         if !history.isEmpty {
             let bytes = [UInt8](history)
             terminalView.feed(byteArray: bytes[...])
-            AppLogger.shared.log("Fed \(bytes.count) bytes history to laid-out terminal (\(terminalView.getTerminal().cols)x\(terminalView.getTerminal().rows))", level: .engine)
+            AppLogger.shared.log("Fed \(bytes.count) bytes history to laid-out terminal", level: .engine)
         }
     }
 
