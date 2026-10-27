@@ -14,7 +14,6 @@ public final class QEMUBinaryRunner {
 
     private var allocatedArgs: [UnsafeMutablePointer<CChar>] = []
     private var allocatedEnv: [UnsafeMutablePointer<CChar>] = []
-    private var childPID: pid_t = -1
 
     public init() {}
 
@@ -145,48 +144,26 @@ public final class QEMUBinaryRunner {
 
         let argc = Int32(arguments.count)
 
-        // Attempt process isolation via fork() to prevent any QEMU abort from killing host UI
-        let pid = fork()
-        if pid == 0 {
-            // --- CHILD PROCESS ---
-            argv.withUnsafeBufferPointer { argvBuf in
-                envp.withUnsafeBufferPointer { envpBuf in
-                    qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
-                }
+        AppLogger.shared.log("Starting QEMU execution on worker thread...", level: .engine)
+
+        // Guard against QEMU calling exit() so the host app does not terminate
+        let qemuThread = pthread_self()
+        _ = atexit_b {
+            if pthread_equal(pthread_self(), qemuThread) != 0 {
+                AppLogger.shared.log("QEMU requested process exit; terminating worker thread safely.", level: .warn)
+                pthread_exit(nil)
             }
-            qemu_main_loop()
-            qemu_cleanup()
-            _exit(0)
-        } else if pid > 0 {
-            // --- PARENT PROCESS ---
-            self.childPID = pid
-            AppLogger.shared.log("QEMU child process spawned with PID \(pid)", level: .engine)
-
-            var status: Int32 = 0
-            waitpid(pid, &status, 0)
-            self.childPID = -1
-
-            let exitCode = (status >> 8) & 0xFF
-            AppLogger.shared.log("QEMU child process terminated with exit code \(exitCode) (raw status: \(status))", level: .engine)
-        } else {
-            // --- IN-PROCESS FALLBACK (if fork restricted) ---
-            AppLogger.shared.log("fork() returned \(errno); running QEMU in worker thread...", level: .warn)
-
-            let qemuThread = pthread_self()
-            _ = atexit_b {
-                if pthread_equal(pthread_self(), qemuThread) != 0 {
-                    pthread_exit(nil)
-                }
-            }
-
-            argv.withUnsafeBufferPointer { argvBuf in
-                envp.withUnsafeBufferPointer { envpBuf in
-                    qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
-                }
-            }
-            qemu_main_loop()
-            qemu_cleanup()
         }
+
+        argv.withUnsafeBufferPointer { argvBuf in
+            envp.withUnsafeBufferPointer { envpBuf in
+                qemu_init(argc, argvBuf.baseAddress, envpBuf.baseAddress)
+            }
+        }
+        AppLogger.shared.log("QEMU initialized; entering main loop.", level: .engine)
+        qemu_main_loop()
+        AppLogger.shared.log("QEMU main loop finished; cleaning up.", level: .engine)
+        qemu_cleanup()
 
         if hasPipe {
             dup2(savedStderr, STDERR_FILENO)
@@ -200,11 +177,6 @@ public final class QEMUBinaryRunner {
     }
 
     public func unload() {
-        if childPID > 0 {
-            kill(childPID, SIGTERM)
-            childPID = -1
-        }
-
         cleanAllocatedStrings()
 
         if let h = handle {
