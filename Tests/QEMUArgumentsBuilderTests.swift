@@ -99,4 +99,22 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
         XCTAssertTrue(args.contains("2048M"))
         XCTAssertTrue(args.contains("4"))
     }
+
+    func testFirmwareFallbackWhenKernelNil() {
+        let config = VMConfig(
+            name: "Debian ARM64",
+            architecture: .arm64
+        )
+        let diskURL = URL(fileURLWithPath: "/tmp/debian.qcow2")
+        let args = QEMUArgumentsBuilder.build(
+            config: config,
+            diskURL: diskURL,
+            kernelURL: nil,
+            initrdURL: nil,
+            sharedFolderURL: nil,
+            socketPort: 12345
+        )
+        XCTAssertTrue(args.contains("-bios"))
+        XCTAssertTrue(args.contains(where: { $0.contains("edk2-aarch64-code.fd") }))
+    }
 }
