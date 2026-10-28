@@ -6,7 +6,6 @@ public final class DistroRegistry {
 
     public init() {
         self.presets = [
-            DistroRegistry.alpineDirectPreset,
             DistroRegistry.alpinePreset,
             DistroRegistry.debianPreset,
             DistroRegistry.ubuntuPreset
@@ -19,11 +18,11 @@ public final class DistroRegistry {
 
     // MARK: - Official Always-Fresh Presets
 
-    public static let alpineDirectPreset = DistroPreset(
-        id: "alpine-direct",
-        name: "Alpine Linux (Direct Boot)",
-        tag: "Instant • 20 MB",
-        summary: "Ultra-fast direct kernel boot without firmware. Instant 0.5s cold boot.",
+    public static let alpinePreset = DistroPreset(
+        id: "alpine-standard",
+        name: "Alpine Linux",
+        tag: "Recommended • 20 MB",
+        summary: "Ultra-lightweight security-oriented Linux. Instant 0.5s direct boot into shell.",
         packageManager: "apk",
         defaultUser: "root",
         defaultPassword: nil,
@@ -63,38 +62,6 @@ public final class DistroRegistry {
                     filename: "rootfs.qcow2"
                 ),
                 defaultBootArgs: "console=ttyS0 modules=loop,squashfs,virtio_blk,virtio_net"
-            )
-        ]
-    )
-
-    public static let alpinePreset = DistroPreset(
-        id: "alpine-standard",
-        name: "Alpine Linux (Cloud Image)",
-        tag: "UEFI • 120 MB",
-        summary: "Ultra-lightweight security-oriented Linux. Persistent pre-installed rootfs with UEFI.",
-        packageManager: "apk",
-        defaultUser: "root",
-        defaultPassword: nil,
-        bootMethod: .cloudImage,
-        recommendedMemoryMB: 512,
-        recommendedCores: 2,
-        recommendedDiskBytes: 4 * 1024 * 1024 * 1024,
-        specs: [
-            .arm64: DistroArchitectureSpec(
-                architecture: .arm64,
-                diskAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/alpine-3.24.3-aarch64-tiny-r0.qcow2")!,
-                    filename: "alpine-3.24.3-aarch64-tiny-r0.qcow2"
-                ),
-                defaultBootArgs: "console=ttyAMA0 root=/dev/vda2 rw"
-            ),
-            .amd64: DistroArchitectureSpec(
-                architecture: .amd64,
-                diskAsset: DistroAsset(
-                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/alpine-3.24.3-x86_64-tiny-r0.qcow2")!,
-                    filename: "alpine-3.24.3-x86_64-tiny-r0.qcow2"
-                ),
-                defaultBootArgs: "console=ttyS0 root=/dev/vda2 rw"
             )
         ]
     )

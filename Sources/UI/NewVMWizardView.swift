@@ -241,6 +241,9 @@ public struct NewVMWizardView: View {
             downloader.download(from: kernelAsset.url, to: kernelDest) { result in
                 switch result {
                 case .success:
+                    self.installationStatus = "Preparing Linux kernel..."
+                    _ = KernelDecompressor.prepareKernelIfNeeded(at: kernelDest)
+
                     if let initrdAsset = spec.initrdAsset {
                         self.installationStatus = "Downloading initramfs..."
                         let initrdDest = DiskManager.shared.diskURL(for: vmId, filename: initrdAsset.filename)
