@@ -105,7 +105,10 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
             name: "Debian ARM64",
             architecture: .arm64
         )
-        let diskURL = URL(fileURLWithPath: "/tmp/debian.qcow2")
+        let diskURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test_vm_\(UUID().uuidString)/debian.qcow2")
+        try? FileManager.default.createDirectory(at: diskURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: diskURL.deletingLastPathComponent()) }
+
         let args = QEMUArgumentsBuilder.build(
             config: config,
             diskURL: diskURL,
@@ -114,7 +117,31 @@ final class QEMUArgumentsBuilderTests: XCTestCase {
             sharedFolderURL: nil,
             socketPort: 12345
         )
-        XCTAssertTrue(args.contains("-bios"))
+        let hasPFlashOrBios = args.contains("-bios") || args.contains(where: { $0.contains("if=pflash") })
+        XCTAssertTrue(hasPFlashOrBios)
         XCTAssertTrue(args.contains(where: { $0.contains("edk2-aarch64-code.fd") }))
+    }
+
+    func testEnsureEFIVarsCreation() throws {
+        let tempVMDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test_vm_vars_\(UUID().uuidString)")
+        let tempROMDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("test_roms_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempVMDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tempROMDir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: tempVMDir)
+            try? FileManager.default.removeItem(at: tempROMDir)
+        }
+
+        // Create dummy template vars
+        let templateURL = tempROMDir.appendingPathComponent("edk2-arm-vars.fd")
+        try Data(repeating: 0xFF, count: 1024).write(to: templateURL)
+
+        let varsURL = QEMUArgumentsBuilder.ensureEFIVars(for: tempVMDir, romDir: tempROMDir, architecture: .arm64)
+        XCTAssertNotNil(varsURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: varsURL!.path))
+
+        let copiedData = try Data(contentsOf: varsURL!)
+        XCTAssertEqual(copiedData.count, 1024)
+        XCTAssertEqual(copiedData.first, 0xFF)
     }
 }

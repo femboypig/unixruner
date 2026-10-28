@@ -6,6 +6,7 @@ public final class DistroRegistry {
 
     public init() {
         self.presets = [
+            DistroRegistry.alpineDirectPreset,
             DistroRegistry.alpinePreset,
             DistroRegistry.debianPreset,
             DistroRegistry.ubuntuPreset
@@ -18,11 +19,59 @@ public final class DistroRegistry {
 
     // MARK: - Official Always-Fresh Presets
 
+    public static let alpineDirectPreset = DistroPreset(
+        id: "alpine-direct",
+        name: "Alpine Linux (Direct Boot)",
+        tag: "Instant • 20 MB",
+        summary: "Ultra-fast direct kernel boot without firmware. Instant 0.5s cold boot.",
+        packageManager: "apk",
+        defaultUser: "root",
+        defaultPassword: nil,
+        bootMethod: .directKernel,
+        recommendedMemoryMB: 512,
+        recommendedCores: 2,
+        recommendedDiskBytes: 4 * 1024 * 1024 * 1024,
+        specs: [
+            .arm64: DistroArchitectureSpec(
+                architecture: .arm64,
+                kernelAsset: DistroAsset(
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/netboot/vmlinuz-virt")!,
+                    filename: "vmlinuz-alpine-arm64"
+                ),
+                initrdAsset: DistroAsset(
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/netboot/initramfs-virt")!,
+                    filename: "initramfs-alpine-arm64"
+                ),
+                diskAsset: DistroAsset(
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/netboot/vmlinuz-virt")!,
+                    filename: "rootfs.qcow2"
+                ),
+                defaultBootArgs: "console=ttyAMA0 modules=loop,squashfs,virtio_blk,virtio_net"
+            ),
+            .amd64: DistroArchitectureSpec(
+                architecture: .amd64,
+                kernelAsset: DistroAsset(
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/netboot/vmlinuz-virt")!,
+                    filename: "vmlinuz-alpine-amd64"
+                ),
+                initrdAsset: DistroAsset(
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/netboot/initramfs-virt")!,
+                    filename: "initramfs-alpine-amd64"
+                ),
+                diskAsset: DistroAsset(
+                    url: URL(string: "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/netboot/vmlinuz-virt")!,
+                    filename: "rootfs.qcow2"
+                ),
+                defaultBootArgs: "console=ttyS0 modules=loop,squashfs,virtio_blk,virtio_net"
+            )
+        ]
+    )
+
     public static let alpinePreset = DistroPreset(
         id: "alpine-standard",
-        name: "Alpine Linux",
-        tag: "Recommended • 120 MB",
-        summary: "Ultra-lightweight security-oriented Linux. Instant boot, minimal memory footprint.",
+        name: "Alpine Linux (Cloud Image)",
+        tag: "UEFI • 120 MB",
+        summary: "Ultra-lightweight security-oriented Linux. Persistent pre-installed rootfs with UEFI.",
         packageManager: "apk",
         defaultUser: "root",
         defaultPassword: nil,

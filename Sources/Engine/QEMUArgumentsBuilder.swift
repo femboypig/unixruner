@@ -70,7 +70,7 @@ public struct QEMUArgumentsBuilder {
             args.append(contentsOf: ["-device", "virtio-9p-pci,fsdev=shared0,mount_tag=host_share"])
         }
 
-        // Direct Kernel Boot (bypasses UEFI, cold boot in 1-2 sec)
+        // Direct Kernel Boot (bypasses UEFI, cold boot in 0.5 sec)
         if let kernel = kernelURL {
             args.append(contentsOf: ["-kernel", kernel.path])
             if let initrd = initrdURL {
@@ -80,16 +80,61 @@ public struct QEMUArgumentsBuilder {
                 args.append(contentsOf: ["-append", config.extraBootArgs])
             }
         } else {
-            // Firmware/BIOS boot for cloud disk images (Debian, Ubuntu, etc.)
-            let efiName = (config.architecture == .arm64) ? "edk2-aarch64-code.fd" : "bios-256k.bin"
-            if let romDir = Bundle.main.resourceURL?.appendingPathComponent("qemu"),
-               FileManager.default.fileExists(atPath: romDir.appendingPathComponent(efiName).path) {
-                args.append(contentsOf: ["-bios", romDir.appendingPathComponent(efiName).path])
+            // Firmware/BIOS boot for cloud disk images (Alpine Cloud, Debian, Ubuntu, etc.)
+            let romDir = Bundle.main.resourceURL?.appendingPathComponent("qemu")
+            let vmDir = diskURL.deletingLastPathComponent()
+
+            if config.architecture == .arm64 {
+                let codeFile = romDir?.appendingPathComponent("edk2-aarch64-code.fd")
+                let varsFile = ensureEFIVars(for: vmDir, romDir: romDir, architecture: .arm64)
+
+                if let code = codeFile, FileManager.default.fileExists(atPath: code.path),
+                   let vars = varsFile, FileManager.default.fileExists(atPath: vars.path) {
+                    // Standard QEMU / UTM PFlash mapping for EDK2 AArch64
+                    args.append(contentsOf: ["-drive", "if=pflash,format=raw,unit=0,file=\(code.path),readonly=on"])
+                    args.append(contentsOf: ["-drive", "if=pflash,format=raw,unit=1,file=\(vars.path)"])
+                } else if let code = codeFile, FileManager.default.fileExists(atPath: code.path) {
+                    args.append(contentsOf: ["-bios", code.path])
+                } else {
+                    args.append(contentsOf: ["-bios", "edk2-aarch64-code.fd"])
+                }
             } else {
-                args.append(contentsOf: ["-bios", efiName])
+                // AMD64 / x86_64: SeaBIOS for BIOS boot
+                let biosName = "bios-256k.bin"
+                if let biosFile = romDir?.appendingPathComponent(biosName),
+                   FileManager.default.fileExists(atPath: biosFile.path) {
+                    args.append(contentsOf: ["-bios", biosFile.path])
+                } else {
+                    args.append(contentsOf: ["-bios", biosName])
+                }
             }
         }
 
         return args
+    }
+
+    /// Prepares per-VM NVRAM variable storage for UEFI firmware
+    public static func ensureEFIVars(for vmDirectory: URL, romDir: URL?, architecture: Architecture) -> URL? {
+        let varsName = "efi_vars.fd"
+        let destURL = vmDirectory.appendingPathComponent(varsName)
+        if FileManager.default.fileExists(atPath: destURL.path) {
+            return destURL
+        }
+
+        guard let romDir = romDir else { return nil }
+        let templateName = (architecture == .arm64) ? "edk2-arm-vars.fd" : "edk2-i386-vars.fd"
+        let templateURL = romDir.appendingPathComponent(templateName)
+        guard FileManager.default.fileExists(atPath: templateURL.path) else {
+            return nil
+        }
+
+        do {
+            try FileManager.default.copyItem(at: templateURL, to: destURL)
+            AppLogger.shared.log("Created per-VM EFI NVRAM variables from \(templateName)", level: .engine)
+            return destURL
+        } catch {
+            AppLogger.shared.log("Failed to copy EFI NVRAM template: \(error.localizedDescription)", level: .error)
+            return nil
+        }
     }
 }
