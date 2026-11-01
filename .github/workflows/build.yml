@@ -1,0 +1,140 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: select xcode version
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app
+          elif [ -d "/Applications/Xcode_16.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.app
+          fi
+          xcodebuild -version
+
+      - name: install xcodegen
+        run: brew install xcodegen
+
+      - name: generate xcode project
+        run: xcodegen generate
+
+      - name: run automated tests
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available | grep -E "iPhone" | head -n 1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+          echo "Running tests on simulator device ID: ${DEVICE_ID}"
+          xcodebuild test \
+            -project unixruner.xcodeproj \
+            -scheme unixruner \
+            -destination "platform=iOS Simulator,id=${DEVICE_ID}" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: build app
+        run: |
+          xcodebuild build \
+            -project unixruner.xcodeproj \
+            -scheme unixruner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: embed qemu engine frameworks and roms
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/unixruner.app"
+          mkdir -p "${APP_PATH}/Frameworks"
+          mkdir -p "${APP_PATH}/qemu"
+
+          echo "Fetching prebuilt QEMU iOS engine from UTM release..."
+          curl -L -s -o /tmp/UTM.ipa https://github.com/utmapp/UTM/releases/download/v5.0.8/UTM.ipa
+
+          mkdir -p /tmp/utm_extracted
+          unzip -q /tmp/UTM.ipa "Payload/UTM.app/Frameworks/*" "Payload/UTM.app/qemu/*" -d /tmp/utm_extracted
+
+          # Keep aarch64 & x86_64, discard other architectures
+          rm -rf /tmp/utm_extracted/Payload/UTM.app/Frameworks/qemu-*-softmmu.framework
+          unzip -q /tmp/UTM.ipa \
+            "Payload/UTM.app/Frameworks/qemu-aarch64-softmmu.framework/*" \
+            "Payload/UTM.app/Frameworks/qemu-x86_64-softmmu.framework/*" \
+            -d /tmp/utm_extracted
+
+          cp -R /tmp/utm_extracted/Payload/UTM.app/Frameworks/* "${APP_PATH}/Frameworks/"
+          cp -R /tmp/utm_extracted/Payload/UTM.app/qemu/* "${APP_PATH}/qemu/"
+          rm -rf /tmp/UTM.ipa /tmp/utm_extracted
+
+      - name: embed alpine linux direct boot payload
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/unixruner.app"
+          mkdir -p "${APP_PATH}/alpine"
+          echo "Embedding Alpine Linux ARM64 kernel and initramfs..."
+          curl -L -s -o "${APP_PATH}/alpine/vmlinuz-virt" \
+            https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/netboot/vmlinuz-virt
+          curl -L -s -o "${APP_PATH}/alpine/initramfs-virt" \
+            https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/netboot/initramfs-virt
+
+          echo "Alpine payload size: $(ls -lh "${APP_PATH}/alpine")"
+
+      - name: package unsigned ipa
+        run: |
+          mkdir -p build/Payload
+          cp -R build/DerivedData/Build/Products/Release-iphoneos/unixruner.app build/Payload/
+
+          echo "Ad-hoc codesigning frameworks and app bundle with JIT entitlements..."
+          for fw in build/Payload/unixruner.app/Frameworks/*.framework; do
+            codesign -s - --force "$fw" 2>/dev/null || true
+          done
+          codesign -s - --force --entitlements Configuration/unixruner.entitlements build/Payload/unixruner.app
+
+          cd build
+          zip -r unixruner-unsigned.ipa Payload
+          cd ..
+
+      - name: upload ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixruner-unsigned
+          path: build/unixruner-unsigned.ipa
+          retention-days: 14
+
+      - name: create github release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete v0.1.0-nightly --yes || true
+          git tag -d v0.1.0-nightly || true
+          git push origin :v0.1.0-nightly || true
+          gh release create v0.1.0-nightly build/unixruner-unsigned.ipa \
+            --title "unixruner v0.1.0-nightly" \
+            --notes "Automated build for iOS 15.0+. Includes embedded Alpine Linux direct boot payload (vmlinuz-virt + initramfs-virt), QEMU ARM64/x86_64 engines, and SwiftTerm socket bridge." \
+            --prerelease
