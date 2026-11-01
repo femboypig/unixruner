@@ -24,6 +24,7 @@ public final class QEMURunner {
 
         isExecuting = true
         Logger.shared.log("Starting QEMU worker thread with \(arguments.count) arguments", level: .engine)
+        Logger.shared.log(arguments.joined(separator: " "), level: .engine)
 
         // Capture stderr in real time
         var pipeFDs = [Int32](repeating: 0, count: 2)

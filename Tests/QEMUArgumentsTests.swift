@@ -16,8 +16,11 @@ final class QEMUArgumentsTests: XCTestCase {
 
         let args = QEMUArguments.build(for: config)
 
+        XCTAssertEqual(args.first, "qemu-system-aarch64")
         XCTAssertTrue(args.contains("-M"))
         XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "virt")
+        XCTAssertTrue(args.contains("-accel"))
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
         XCTAssertTrue(args.contains("-cpu"))
         XCTAssertEqual(args[args.firstIndex(of: "-cpu")! + 1], "cortex-a57")
         XCTAssertTrue(args.contains("-m"))
@@ -44,10 +47,13 @@ final class QEMUArgumentsTests: XCTestCase {
 
         let args = QEMUArguments.build(for: config, biosDirectory: "/opt/qemu/roms")
 
+        XCTAssertEqual(args.first, "qemu-system-x86_64")
         XCTAssertTrue(args.contains("-L"))
         XCTAssertEqual(args[args.firstIndex(of: "-L")! + 1], "/opt/qemu/roms")
         XCTAssertTrue(args.contains("-M"))
         XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "pc")
+        XCTAssertTrue(args.contains("-accel"))
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
         XCTAssertTrue(args.contains("-cpu"))
         XCTAssertEqual(args[args.firstIndex(of: "-cpu")! + 1], "qemu64")
         XCTAssertTrue(args.contains("-m"))

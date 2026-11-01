@@ -51,6 +51,15 @@ public enum Architecture: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    public var binaryName: String {
+        switch self {
+        case .arm64:
+            return "qemu-system-aarch64"
+        case .x86_64:
+            return "qemu-system-x86_64"
+        }
+    }
+
     public var defaultMachine: String {
         switch self {
         case .arm64:

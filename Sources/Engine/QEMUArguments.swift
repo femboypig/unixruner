@@ -2,16 +2,18 @@ import Foundation
 
 public struct QEMUArguments {
     public static func build(for config: VMConfig, biosDirectory: String? = nil) -> [String] {
-        var args: [String] = []
+        var args: [String] = [config.architecture.binaryName]
 
-        if let bios = biosDirectory, !bios.isEmpty {
-            args += ["-L", bios]
+        let romDir = biosDirectory ?? Bundle.main.bundleURL.appendingPathComponent("qemu").path
+        if FileManager.default.fileExists(atPath: romDir) {
+            args += ["-L", romDir]
         }
 
         switch config.architecture {
         case .arm64:
             args += [
                 "-M", "virt",
+                "-accel", "tcg",
                 "-cpu", "cortex-a57",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"
@@ -19,6 +21,7 @@ public struct QEMUArguments {
         case .x86_64:
             args += [
                 "-M", "pc",
+                "-accel", "tcg",
                 "-cpu", "qemu64",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"

@@ -20,6 +20,10 @@ public final class AlpinePayload {
     }
 
     public var bundledKernelURL: URL? {
+        let direct = Bundle.main.bundleURL.appendingPathComponent("alpine/\(Self.defaultKernelName)")
+        if fileManager.fileExists(atPath: direct.path) {
+            return direct
+        }
         if let url = Bundle.main.url(forResource: Self.defaultKernelName, withExtension: nil, subdirectory: "alpine") {
             return url
         }
@@ -27,6 +31,10 @@ public final class AlpinePayload {
     }
 
     public var bundledInitrdURL: URL? {
+        let direct = Bundle.main.bundleURL.appendingPathComponent("alpine/\(Self.defaultInitrdName)")
+        if fileManager.fileExists(atPath: direct.path) {
+            return direct
+        }
         if let url = Bundle.main.url(forResource: Self.defaultInitrdName, withExtension: nil, subdirectory: "alpine") {
             return url
         }
