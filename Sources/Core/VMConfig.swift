@@ -45,7 +45,7 @@ public struct VMConfig: Codable, Identifiable, Equatable {
             cpuCount: 1,
             kernelPath: kernelPath,
             initrdPath: initrdPath,
-            cmdline: "\(Architecture.arm64.defaultConsole) quiet",
+            cmdline: Architecture.arm64.defaultConsole,
             drivePath: nil,
             serialPort: 4444
         )

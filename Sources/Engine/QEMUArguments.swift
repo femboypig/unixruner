@@ -12,8 +12,8 @@ public struct QEMUArguments {
         switch config.architecture {
         case .arm64:
             args += [
-                "-M", "virt",
-                "-accel", "tcg",
+                "-M", "virt,highmem=off",
+                "-accel", "tcg,tb-size=128",
                 "-cpu", "cortex-a57",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"
@@ -21,7 +21,7 @@ public struct QEMUArguments {
         case .x86_64:
             args += [
                 "-M", "pc",
-                "-accel", "tcg",
+                "-accel", "tcg,tb-size=128",
                 "-cpu", "qemu64",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"
@@ -43,7 +43,7 @@ public struct QEMUArguments {
         if let drive = config.drivePath, !drive.isEmpty {
             args += [
                 "-drive", "file=\(drive),if=none,id=hd0,format=qcow2",
-                "-device", config.architecture == .arm64 ? "virtio-blk-device,drive=hd0" : "virtio-blk-pci,drive=hd0"
+                "-device", "virtio-blk-pci,drive=hd0"
             ]
         }
 
@@ -57,7 +57,7 @@ public struct QEMUArguments {
         // User-mode networking (slirp)
         args += [
             "-netdev", "user,id=net0",
-            "-device", config.architecture == .arm64 ? "virtio-net-device,netdev=net0" : "virtio-net-pci,netdev=net0"
+            "-device", "virtio-net-pci,netdev=net0"
         ]
 
         return args

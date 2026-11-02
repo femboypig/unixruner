@@ -81,9 +81,9 @@ public enum Architecture: String, CaseIterable, Codable, Identifiable {
     public var defaultConsole: String {
         switch self {
         case .arm64:
-            return "console=ttyAMA0 earlycon"
+            return "console=ttyAMA0 earlycon panic=1"
         case .x86_64:
-            return "console=ttyS0"
+            return "console=ttyS0 panic=1"
         }
     }
 }

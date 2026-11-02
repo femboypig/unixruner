@@ -3,13 +3,14 @@ import XCTest
 
 final class VMConfigTests: XCTestCase {
     func testDefaultAlpineConfig() {
-        let config = VMConfig.defaultAlpine(kernelPath: "/alpine/vmlinuz-virt", initrdPath: "/alpine/initramfs-virt")
+        let config = VMConfig.defaultAlpine(kernelPath: "/alpine/Image", initrdPath: "/alpine/initramfs.cpio.gz")
         XCTAssertEqual(config.name, "Alpine Linux")
         XCTAssertEqual(config.architecture, .arm64)
         XCTAssertEqual(config.memoryMB, 512)
         XCTAssertEqual(config.cpuCount, 1)
-        XCTAssertEqual(config.kernelPath, "/alpine/vmlinuz-virt")
-        XCTAssertEqual(config.initrdPath, "/alpine/initramfs-virt")
+        XCTAssertEqual(config.kernelPath, "/alpine/Image")
+        XCTAssertEqual(config.initrdPath, "/alpine/initramfs.cpio.gz")
+        XCTAssertEqual(config.cmdline, "console=ttyAMA0 earlycon panic=1")
         XCTAssertEqual(config.serialPort, 4444)
     }
 
