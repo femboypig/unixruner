@@ -32,19 +32,27 @@ public final class QEMURunner {
         let savedStderr = dup(STDERR_FILENO)
 
         var readSource: DispatchSourceRead?
+        let pipeQueue = DispatchQueue(label: "org.unixruner.stderr")
         if hasPipe {
             _ = fcntl(pipeFDs[0], F_SETFL, fcntl(pipeFDs[0], F_GETFL, 0) | O_NONBLOCK)
             dup2(pipeFDs[1], STDERR_FILENO)
             close(pipeFDs[1])
 
-            let source = DispatchSource.makeReadSource(fileDescriptor: pipeFDs[0], queue: DispatchQueue.global(qos: .utility))
+            let source = DispatchSource.makeReadSource(fileDescriptor: pipeFDs[0], queue: pipeQueue)
             source.setEventHandler {
                 var buf = [UInt8](repeating: 0, count: 2048)
-                let count = read(pipeFDs[0], &buf, buf.count - 1)
+                let count = read(pipeFDs[0], &buf, buf.count)
                 if count > 0 {
-                    buf[count] = 0
-                    let str = String(cString: buf)
-                    Logger.shared.log(str.trimmingCharacters(in: .whitespacesAndNewlines), level: .engine)
+                    let str = String(decoding: buf.prefix(count), as: UTF8.self)
+                    let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        for line in trimmed.components(separatedBy: .newlines) {
+                            let clean = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !clean.isEmpty {
+                                Logger.shared.log(clean, level: .engine)
+                            }
+                        }
+                    }
                 }
             }
             readSource = source
@@ -71,27 +79,33 @@ public final class QEMURunner {
                 guard !stderrRestored else { return }
                 stderrRestored = true
                 if hasPipe {
+                    Darwin.fflush(Darwin.stderr)
                     dup2(savedStderr, STDERR_FILENO)
                     close(savedStderr)
                     readSource?.cancel()
                     readSource?.setEventHandler(handler: nil)
 
-                    var buf = [UInt8](repeating: 0, count: 2048)
-                    while true {
-                        let count = read(pipeFDs[0], &buf, buf.count - 1)
-                        if count > 0 {
-                            buf[count] = 0
-                            let str = String(cString: buf)
-                            let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !trimmed.isEmpty {
-                                Logger.shared.log(trimmed, level: .engine)
+                    pipeQueue.sync {
+                        var buf = [UInt8](repeating: 0, count: 2048)
+                        while true {
+                            let count = read(pipeFDs[0], &buf, buf.count)
+                            if count > 0 {
+                                let str = String(decoding: buf.prefix(count), as: UTF8.self)
+                                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !trimmed.isEmpty {
+                                    for line in trimmed.components(separatedBy: .newlines) {
+                                        let clean = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        if !clean.isEmpty {
+                                            Logger.shared.log(clean, level: .engine)
+                                        }
+                                    }
+                                }
+                            } else {
+                                break
                             }
-                        } else {
-                            break
                         }
+                        close(pipeFDs[0])
                     }
-
-                    close(pipeFDs[0])
                 }
             }
 
@@ -152,5 +166,13 @@ public final class QEMURunner {
         self.workerThread = thread
         thread.qualityOfService = .userInteractive
         thread.start()
+    }
+
+    public func stop() {
+        guard isExecuting else { return }
+        Logger.shared.log("Requesting QEMU engine shutdown", level: .engine)
+        if let shutdown = loader.qemuShutdownRequest {
+            shutdown(1)
+        }
     }
 }

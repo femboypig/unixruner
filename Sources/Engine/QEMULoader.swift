@@ -5,6 +5,7 @@ public final class QEMULoader {
     public typealias QemuInit = @convention(c) (Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?) -> Int32
     public typealias QemuMainLoop = @convention(c) () -> Void
     public typealias QemuCleanup = @convention(c) () -> Void
+    public typealias QemuShutdownRequest = @convention(c) (Int32) -> Void
 
     private var primaryHandle: UnsafeMutableRawPointer?
     private var dependencyHandles: [UnsafeMutableRawPointer] = []
@@ -12,6 +13,7 @@ public final class QEMULoader {
     public private(set) var qemuInit: QemuInit?
     public private(set) var qemuMainLoop: QemuMainLoop?
     public private(set) var qemuCleanup: QemuCleanup?
+    public private(set) var qemuShutdownRequest: QemuShutdownRequest?
 
     public init() {}
 
@@ -60,6 +62,10 @@ public final class QEMULoader {
         self.qemuInit = unsafeBitCast(initSym, to: QemuInit.self)
         self.qemuMainLoop = unsafeBitCast(loopSym, to: QemuMainLoop.self)
         self.qemuCleanup = unsafeBitCast(cleanupSym, to: QemuCleanup.self)
+
+        if let shutdownSym = dlsym(handle, "qemu_system_shutdown_request") {
+            self.qemuShutdownRequest = unsafeBitCast(shutdownSym, to: QemuShutdownRequest.self)
+        }
     }
 
     public func unload() {
@@ -75,5 +81,6 @@ public final class QEMULoader {
         qemuInit = nil
         qemuMainLoop = nil
         qemuCleanup = nil
+        qemuShutdownRequest = nil
     }
 }

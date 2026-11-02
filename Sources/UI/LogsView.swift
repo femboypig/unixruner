@@ -1,8 +1,12 @@
 import SwiftUI
+import Combine
 
 public struct LogsView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var logs: [Logger.Entry] = []
+    @State private var copied: Bool = false
+
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     public init() {}
 
@@ -29,35 +33,43 @@ public struct LogsView: View {
                         .font(Theme.monoCaption)
                         .foregroundColor(.gray)
                 } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 6) {
-                            ForEach(logs) { entry in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(entry.level.rawValue)
-                                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 1)
-                                            .background(levelColor(entry.level).opacity(0.2))
-                                            .foregroundColor(levelColor(entry.level))
-                                            .cornerRadius(3)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 6) {
+                                ForEach(logs) { entry in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(spacing: 6) {
+                                            Text(entry.level.rawValue)
+                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1)
+                                                .background(levelColor(entry.level).opacity(0.2))
+                                                .foregroundColor(levelColor(entry.level))
+                                                .cornerRadius(3)
 
-                                        Spacer()
+                                            Spacer()
 
-                                        Text(entry.timestamp, style: .time)
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundColor(.gray)
+                                            Text(entry.timestamp, style: .time)
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundColor(.gray)
+                                        }
+
+                                        Text(entry.message)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundColor(Theme.terminalForeground)
+                                            .textSelection(.enabled)
                                     }
-
-                                    Text(entry.message)
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundColor(Theme.terminalForeground)
-                                        .textSelection(.enabled)
+                                    .id(entry.id)
+                                    .padding(.vertical, 3)
                                 }
-                                .padding(.vertical, 3)
+                            }
+                            .padding(12)
+                        }
+                        .onAppear {
+                            if let last = logs.last {
+                                proxy.scrollTo(last.id, anchor: .bottom)
                             }
                         }
-                        .padding(12)
                     }
                 }
             }
@@ -78,8 +90,12 @@ public struct LogsView: View {
                         Button(action: {
                             let text = logs.map { "[\($0.level.rawValue)] \($0.message)" }.joined(separator: "\n")
                             UIPasteboard.general.string = text
+                            copied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                copied = false
+                            }
                         }) {
-                            Image(systemName: "doc.on.doc")
+                            Image(systemName: copied ? "checkmark" : "doc.on.doc")
                                 .foregroundColor(Theme.accent)
                         }
 
@@ -92,6 +108,9 @@ public struct LogsView: View {
                 }
             }
             .onAppear {
+                logs = Logger.shared.snapshot()
+            }
+            .onReceive(timer) { _ in
                 logs = Logger.shared.snapshot()
             }
         }

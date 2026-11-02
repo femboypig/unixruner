@@ -36,8 +36,13 @@ public final class VMListViewModel: ObservableObject {
         guard state.isRunning || state == .starting else { return }
         state = .stopping
         socketBridge.write(data: Data("poweroff\n".utf8))
-        socketBridge.disconnect()
-        state = .stopped
+        QEMURunner.shared.stop()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            guard let self = self, self.state == .stopping else { return }
+            self.socketBridge.disconnect()
+            self.state = .stopped
+        }
     }
 }
 

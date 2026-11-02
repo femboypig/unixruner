@@ -87,4 +87,20 @@ final class QEMUArgumentsTests: XCTestCase {
         XCTAssertFalse(args.contains("-drive"))
         XCTAssertFalse(args.contains("virtio-blk-pci,drive=hd0"))
     }
+
+    func testAccelDoesNotContainTBSize() {
+        let armConfig = VMConfig.defaultAlpine(kernelPath: "k", initrdPath: "i")
+        let armArgs = QEMUArguments.build(for: armConfig)
+        if let idx = armArgs.firstIndex(of: "-accel") {
+            XCTAssertEqual(armArgs[idx + 1], "tcg")
+            XCTAssertFalse(armArgs[idx + 1].contains("tb-size"))
+        }
+
+        let x86Config = VMConfig(name: "x86", architecture: .x86_64, memoryMB: 1024, cpuCount: 1)
+        let x86Args = QEMUArguments.build(for: x86Config)
+        if let idx = x86Args.firstIndex(of: "-accel") {
+            XCTAssertEqual(x86Args[idx + 1], "tcg")
+            XCTAssertFalse(x86Args[idx + 1].contains("tb-size"))
+        }
+    }
 }
