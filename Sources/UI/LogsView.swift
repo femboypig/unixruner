@@ -88,6 +88,8 @@ public struct LogsView: View {
                             }
                             .padding(.vertical, 8)
                         }
+                        .padding(.vertical, 4)
+                        }
                         .onAppear {
                             if let last = logs.last {
                                 proxy.scrollTo(last.id, anchor: .bottom)
