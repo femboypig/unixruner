@@ -94,7 +94,7 @@ jobs:
 
       - name: embed alpine linux direct boot payload
         run: |
-          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/unixruner.app"
+          APP_PATH="$(pwd)/build/DerivedData/Build/Products/Release-iphoneos/unixruner.app"
           mkdir -p "${APP_PATH}/alpine"
           BUILD_DIR="/tmp/alpine_build"
           rm -rf "${BUILD_DIR}"
@@ -159,7 +159,8 @@ jobs:
           chmod 0755 "${BUILD_DIR}/rootfs/bin/cttyhack"
 
           echo "Archiving rootfs into initramfs.cpio.gz..."
-          (cd "${BUILD_DIR}/rootfs" && find . | cpio -o -H newc 2>/dev/null | gzip -9 > "${APP_PATH}/alpine/initramfs.cpio.gz")
+          (cd "${BUILD_DIR}/rootfs" && find . | cpio -o -H newc 2>/dev/null | gzip -9 > "${BUILD_DIR}/initramfs.cpio.gz")
+          cp "${BUILD_DIR}/initramfs.cpio.gz" "${APP_PATH}/alpine/initramfs.cpio.gz"
 
           python3 - "${APP_PATH}/alpine/initramfs.cpio.gz" << 'PYEOF'
           import sys, gzip
