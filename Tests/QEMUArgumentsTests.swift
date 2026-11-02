@@ -19,9 +19,9 @@ final class QEMUArgumentsTests: XCTestCase {
 
         XCTAssertEqual(args.first, "qemu-system-aarch64")
         XCTAssertTrue(args.contains("-M"))
-        XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "virt,highmem=off")
+        XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "virt")
         XCTAssertTrue(args.contains("-accel"))
-        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg,tb-size=128")
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
         XCTAssertTrue(args.contains("-cpu"))
         XCTAssertEqual(args[args.firstIndex(of: "-cpu")! + 1], "cortex-a57")
         XCTAssertTrue(args.contains("-m"))
@@ -35,7 +35,8 @@ final class QEMUArgumentsTests: XCTestCase {
         XCTAssertTrue(args.contains("-append"))
         XCTAssertEqual(args[args.firstIndex(of: "-append")! + 1], "console=ttyAMA0 earlycon panic=1")
         XCTAssertTrue(args.contains("virtio-blk-pci,drive=hd0"))
-        XCTAssertTrue(args.contains("virtio-net-pci,netdev=net0"))
+        XCTAssertFalse(args.contains("-netdev"))
+        XCTAssertFalse(args.contains("virtio-net-pci,netdev=net0"))
         XCTAssertFalse(args.contains("virtio-blk-device,drive=hd0"))
         XCTAssertFalse(args.contains("virtio-net-device,netdev=net0"))
         XCTAssertTrue(args.contains("-nographic"))
@@ -63,13 +64,27 @@ final class QEMUArgumentsTests: XCTestCase {
         XCTAssertTrue(args.contains("-M"))
         XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "pc")
         XCTAssertTrue(args.contains("-accel"))
-        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg,tb-size=128")
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
         XCTAssertTrue(args.contains("-cpu"))
         XCTAssertEqual(args[args.firstIndex(of: "-cpu")! + 1], "qemu64")
         XCTAssertTrue(args.contains("-m"))
         XCTAssertEqual(args[args.firstIndex(of: "-m")! + 1], "1024M")
         XCTAssertTrue(args.contains("virtio-blk-pci,drive=hd0"))
-        XCTAssertTrue(args.contains("virtio-net-pci,netdev=net0"))
+        XCTAssertFalse(args.contains("-netdev"))
+        XCTAssertFalse(args.contains("virtio-net-pci,netdev=net0"))
         XCTAssertFalse(args.contains("-initrd"))
+    }
+
+    func testDefaultAlpineArguments() {
+        let config = VMConfig.defaultAlpine(kernelPath: "/alpine/Image", initrdPath: "/alpine/initramfs.cpio.gz")
+        let args = QEMUArguments.build(for: config)
+
+        XCTAssertEqual(args.first, "qemu-system-aarch64")
+        XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "virt")
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
+        XCTAssertFalse(args.contains("-netdev"))
+        XCTAssertFalse(args.contains("virtio-net-pci,netdev=net0"))
+        XCTAssertFalse(args.contains("-drive"))
+        XCTAssertFalse(args.contains("virtio-blk-pci,drive=hd0"))
     }
 }

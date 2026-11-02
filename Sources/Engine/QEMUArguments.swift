@@ -16,8 +16,8 @@ public struct QEMUArguments {
         switch config.architecture {
         case .arm64:
             args += [
-                "-M", "virt,highmem=off",
-                "-accel", "tcg,tb-size=128",
+                "-M", "virt",
+                "-accel", "tcg",
                 "-cpu", "cortex-a57",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"
@@ -25,7 +25,7 @@ public struct QEMUArguments {
         case .x86_64:
             args += [
                 "-M", "pc",
-                "-accel", "tcg,tb-size=128",
+                "-accel", "tcg",
                 "-cpu", "qemu64",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"
@@ -56,12 +56,6 @@ public struct QEMUArguments {
             "-nographic",
             "-chardev", "socket,id=term,host=127.0.0.1,port=\(config.serialPort),server=on,wait=off",
             "-serial", "chardev:term"
-        ]
-
-        // User-mode networking (slirp)
-        args += [
-            "-netdev", "user,id=net0",
-            "-device", "virtio-net-pci,netdev=net0"
         ]
 
         return args

@@ -74,6 +74,23 @@ public final class QEMURunner {
                     dup2(savedStderr, STDERR_FILENO)
                     close(savedStderr)
                     readSource?.cancel()
+                    readSource?.setEventHandler(handler: nil)
+
+                    var buf = [UInt8](repeating: 0, count: 2048)
+                    while true {
+                        let count = read(pipeFDs[0], &buf, buf.count - 1)
+                        if count > 0 {
+                            buf[count] = 0
+                            let str = String(cString: buf)
+                            let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty {
+                                Logger.shared.log(trimmed, level: .engine)
+                            }
+                        } else {
+                            break
+                        }
+                    }
+
                     close(pipeFDs[0])
                 }
             }
@@ -100,8 +117,8 @@ public final class QEMURunner {
             let currentThread = pthread_self()
             _ = atexit_b {
                 if pthread_equal(pthread_self(), currentThread) != 0 {
-                    Logger.shared.log("QEMU requested process exit; terminating worker thread safely.", level: .warn)
                     restoreStderr()
+                    Logger.shared.log("QEMU requested process exit; terminating worker thread safely.", level: .warn)
                     cleanupAllocations()
                     notifyExit()
                     pthread_exit(nil)

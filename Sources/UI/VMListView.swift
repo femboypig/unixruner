@@ -1,28 +1,14 @@
 import SwiftUI
 
 public final class VMListViewModel: ObservableObject {
-    @Published public var vms: [VMConfig] = []
     @Published public var state: VMState = .stopped
-    @Published public var activeVM: VMConfig?
-    @Published public var showConsole = false
-
     public let socketBridge = SerialSocketBridge()
 
-    public init() {
-        loadDefaultVM()
-    }
+    public init() {}
 
-    public func loadDefaultVM() {
-        let kernel = AlpinePayload.shared.resolvedKernelPath() ?? ""
-        let initrd = AlpinePayload.shared.resolvedInitrdPath() ?? ""
-        let alpine = VMConfig.defaultAlpine(kernelPath: kernel, initrdPath: initrd)
-        self.vms = [alpine]
-    }
-
-    public func start(vm: VMConfig) {
-        guard !state.isRunning else { return }
+    public func start() {
+        guard !state.isRunning && state != .starting else { return }
         state = .starting
-        activeVM = vm
 
         guard let kernel = AlpinePayload.shared.resolvedKernelPath(),
               let initrd = AlpinePayload.shared.resolvedInitrdPath() else {
@@ -30,27 +16,24 @@ public final class VMListViewModel: ObservableObject {
             return
         }
 
-        var runningConfig = vm
-        runningConfig.kernelPath = kernel
-        runningConfig.initrdPath = initrd
-
-        let args = QEMUArguments.build(for: runningConfig)
+        let config = VMConfig.defaultAlpine(kernelPath: kernel, initrdPath: initrd)
+        let args = QEMUArguments.build(for: config)
 
         do {
-            try QEMURunner.shared.run(arguments: args, architecture: vm.architecture) { [weak self] in
+            try QEMURunner.shared.run(arguments: args, architecture: config.architecture) { [weak self] in
                 self?.state = .stopped
                 self?.socketBridge.disconnect()
             }
 
             state = .running
-            socketBridge.connect(port: runningConfig.serialPort)
-            showConsole = true
+            socketBridge.connect(port: config.serialPort)
         } catch {
             state = .error(error.localizedDescription)
         }
     }
 
     public func stop() {
+        guard state.isRunning || state == .starting else { return }
         state = .stopping
         socketBridge.write(data: Data("poweroff\n".utf8))
         socketBridge.disconnect()
@@ -60,161 +43,91 @@ public final class VMListViewModel: ObservableObject {
 
 public struct VMListView: View {
     @StateObject private var viewModel = VMListViewModel()
-    @State private var showSettings = false
+    @State private var showLogs = false
 
     public init() {}
 
+    private var statusColor: Color {
+        switch viewModel.state {
+        case .stopped:
+            return Theme.stoppedGray
+        case .starting, .stopping:
+            return .orange
+        case .running:
+            return Theme.runningGreen
+        case .error:
+            return .red
+        }
+    }
+
     public var body: some View {
-        NavigationView {
-            ZStack {
-                Theme.background.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 16) {
-                        ForEach(viewModel.vms) { vm in
-                            vmCard(for: vm)
-                        }
-                    }
-                    .padding(16)
-                }
-            }
-            .navigationTitle("unixruner")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showSettings = true }) {
-                        Image(systemName: "gearshape")
-                            .foregroundColor(Theme.accent)
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-            .fullScreenCover(isPresented: $viewModel.showConsole) {
-                consoleSheet
-            }
-        }
-        .navigationViewStyle(.stack)
-    }
-
-    private func vmCard(for vm: VMConfig) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(vm.name)
-                        .font(.headline)
-                        .foregroundColor(.white)
-
-                    HStack(spacing: 6) {
-                        Image(systemName: vm.architecture.speedIcon)
-                            .foregroundColor(vm.architecture == .arm64 ? Theme.runningGreen : .yellow)
-                        Text("\(vm.architecture.displayName) • \(vm.architecture.speedLabel)")
-                            .font(Theme.monoCaption)
-                            .foregroundColor(.gray)
-                    }
-                }
-
-                Spacer()
-
-                statusBadge
-            }
-
-            Divider().background(Color.white.opacity(0.1))
-
-            HStack {
-                Label("\(vm.memoryMB) MB", systemImage: "memorychip")
-                    .font(Theme.monoCaption)
-                    .foregroundColor(.gray)
-
-                Spacer()
-
-                Label("\(vm.cpuCount) Core", systemImage: "cpu")
-                    .font(Theme.monoCaption)
-                    .foregroundColor(.gray)
-            }
-
-            HStack(spacing: 12) {
-                if viewModel.state.isRunning {
-                    Button(action: { viewModel.showConsole = true }) {
-                        Label("Console", systemImage: "terminal")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Theme.accent)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-
-                    Button(action: { viewModel.stop() }) {
-                        Label("Stop", systemImage: "stop.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.red.opacity(0.8))
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                } else {
-                    Button(action: { viewModel.start(vm: vm) }) {
-                        Label("Start VM", systemImage: "play.fill")
-                            .font(.system(.body, design: .rounded).weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Theme.runningGreen)
-                            .foregroundColor(.black)
-                            .cornerRadius(8)
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .background(Theme.cardBackground)
-        .cornerRadius(12)
-    }
-
-    private var statusBadge: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(viewModel.state.isRunning ? Theme.runningGreen : Theme.stoppedGray)
-                .frame(width: 8, height: 8)
-
-            Text(viewModel.state.statusText)
-                .font(Theme.monoCaption)
-                .foregroundColor(viewModel.state.isRunning ? Theme.runningGreen : Theme.stoppedGray)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Color.black.opacity(0.3))
-        .cornerRadius(20)
-    }
-
-    private var consoleSheet: some View {
         ZStack {
             Theme.terminalBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                HStack {
-                    Text(viewModel.activeVM?.name ?? "Console")
-                        .font(Theme.monoFont)
-                        .foregroundColor(.white)
+                // Minimal top status header
+                HStack(spacing: 10) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+
+                        Text(viewModel.state.statusText)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
 
                     Spacer()
 
-                    Button(action: { viewModel.showConsole = false }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.gray)
+                    Button(action: { viewModel.start() }) {
+                        Text("Start")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(viewModel.state.isRunning || viewModel.state == .starting ? Color.white.opacity(0.1) : Theme.runningGreen)
+                            .foregroundColor(viewModel.state.isRunning || viewModel.state == .starting ? .gray : .black)
+                            .cornerRadius(5)
+                    }
+                    .disabled(viewModel.state.isRunning || viewModel.state == .starting)
+
+                    Button(action: { viewModel.stop() }) {
+                        Text("Stop")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(viewModel.state.isRunning ? Color.red.opacity(0.8) : Color.white.opacity(0.1))
+                            .foregroundColor(viewModel.state.isRunning ? .white : .gray)
+                            .cornerRadius(5)
+                    }
+                    .disabled(!viewModel.state.isRunning && viewModel.state != .starting)
+
+                    Button(action: { showLogs = true }) {
+                        Text("Logs")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.white.opacity(0.15))
+                            .foregroundColor(.white)
+                            .cornerRadius(5)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.black.opacity(0.6))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.black.opacity(0.85))
 
+                // Screen body: Pure SwiftTerm ConsoleView directly filling the screen
                 ConsoleView(socketBridge: viewModel.socketBridge)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                // Bottom: TerminalAccessoryBar
                 TerminalAccessoryBar { seq in
                     viewModel.socketBridge.write(data: Data(seq.utf8))
                 }
             }
+        }
+        .sheet(isPresented: $showLogs) {
+            LogsView()
         }
     }
 }
