@@ -4,9 +4,13 @@ public struct QEMUArguments {
     public static func build(for config: VMConfig, biosDirectory: String? = nil) -> [String] {
         var args: [String] = [config.architecture.binaryName]
 
-        let romDir = biosDirectory ?? Bundle.main.bundleURL.appendingPathComponent("qemu").path
-        if FileManager.default.fileExists(atPath: romDir) {
-            args += ["-L", romDir]
+        if let bios = biosDirectory {
+            args += ["-L", bios]
+        } else {
+            let romDir = Bundle.main.bundleURL.appendingPathComponent("qemu").path
+            if FileManager.default.fileExists(atPath: romDir) {
+                args += ["-L", romDir]
+            }
         }
 
         switch config.architecture {
