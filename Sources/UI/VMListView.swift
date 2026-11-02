@@ -2,12 +2,20 @@ import SwiftUI
 
 public final class VMListViewModel: ObservableObject {
     @Published public var state: VMState = .stopped
+    @Published public var isJITActive: Bool = JITManager.isJITEnabled
     public let socketBridge = SerialSocketBridge()
 
-    public init() {}
+    public init() {
+        refreshJIT()
+    }
+
+    public func refreshJIT() {
+        isJITActive = JITManager.isJITEnabled
+    }
 
     public func start() {
         guard !state.isRunning && state != .starting else { return }
+        refreshJIT()
         state = .starting
 
         guard let kernel = AlpinePayload.shared.resolvedKernelPath(),
@@ -81,14 +89,30 @@ public struct VMListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 8, height: 8)
+                    HStack(spacing: 8) {
+                        // VM State
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(statusColor)
+                                .frame(width: 8, height: 8)
 
-                        Text(viewModel.state.statusText)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            Text(viewModel.state.statusText)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        // JIT Status Badge
+                        HStack(spacing: 3) {
+                            Image(systemName: viewModel.isJITActive ? "bolt.fill" : "bolt.slash.fill")
+                                .font(.system(size: 10, weight: .bold))
+                            Text(viewModel.isJITActive ? "JIT" : "NO JIT")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(viewModel.isJITActive ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+                        .foregroundColor(viewModel.isJITActive ? .green : .orange)
+                        .cornerRadius(6)
                     }
                 }
 
@@ -119,6 +143,9 @@ public struct VMListView: View {
             }
             .sheet(isPresented: $showLogs) {
                 LogsView()
+            }
+            .onAppear {
+                viewModel.refreshJIT()
             }
         }
         .navigationViewStyle(.stack)

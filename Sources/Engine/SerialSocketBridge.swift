@@ -7,6 +7,7 @@ public final class SerialSocketBridge {
     private let queue = DispatchQueue(label: "org.unixruner.socketbridge", qos: .userInteractive)
     private var earlyBuffer = Data()
     private static let maxBufferSize = 512 * 1024
+    private var loggedFirstReceive = false
 
     public var onDataReceived: ((Data) -> Void)? {
         didSet {
@@ -25,17 +26,22 @@ public final class SerialSocketBridge {
         disconnect()
     }
 
-    public func connect(port: Int, maxAttempts: Int = 30, retryInterval: TimeInterval = 0.2) {
+    public func connect(port: Int, maxAttempts: Int = 120, retryInterval: TimeInterval = 0.25) {
         DispatchQueue.main.async {
             self.earlyBuffer.removeAll()
+            self.loggedFirstReceive = false
         }
+
+        Logger.shared.log("Serial socket: initiating connection to 127.0.0.1:\(port)...", level: .engine)
 
         queue.async { [weak self] in
             guard let self = self else { return }
 
-            for _ in 0..<maxAttempts {
+            var lastErrno: Int32 = 0
+            for attempt in 1...maxAttempts {
                 let fd = socket(AF_INET, SOCK_STREAM, 0)
                 if fd < 0 {
+                    lastErrno = errno
                     Thread.sleep(forTimeInterval: retryInterval)
                     continue
                 }
@@ -56,15 +62,20 @@ public final class SerialSocketBridge {
                     _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
                     self.socketFD = fd
                     self.startReading()
+                    Logger.shared.log("Serial socket: connected to 127.0.0.1:\(port) on attempt \(attempt)", level: .engine)
                     DispatchQueue.main.async {
                         self.onConnected?()
                     }
                     return
                 }
 
+                lastErrno = errno
                 close(fd)
                 Thread.sleep(forTimeInterval: retryInterval)
             }
+
+            let errStr = String(cString: strerror(lastErrno))
+            Logger.shared.log("Serial socket: failed to connect to 127.0.0.1:\(port) after \(maxAttempts) attempts (\(errStr))", level: .error)
         }
     }
 
@@ -79,6 +90,10 @@ public final class SerialSocketBridge {
             if bytesRead > 0 {
                 let data = Data(buffer.prefix(bytesRead))
                 DispatchQueue.main.async {
+                    if !self.loggedFirstReceive {
+                        self.loggedFirstReceive = true
+                        Logger.shared.log("Serial socket: received first \(bytesRead) bytes from VM console", level: .engine)
+                    }
                     if let handler = self.onDataReceived {
                         if !self.earlyBuffer.isEmpty {
                             let pending = self.earlyBuffer
@@ -94,6 +109,7 @@ public final class SerialSocketBridge {
                     }
                 }
             } else if bytesRead == 0 {
+                Logger.shared.log("Serial socket: peer closed connection", level: .warn)
                 self.disconnect()
             }
         }

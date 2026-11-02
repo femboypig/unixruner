@@ -33,7 +33,30 @@ public struct LogsView: View {
                 } else {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("JIT Status:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text(JITManager.statusDescription)
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(JITManager.isJITEnabled ? .green : .orange)
+
+                                    Spacer()
+
+                                    Text("Arch: ARM64")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color(UIColor.secondarySystemBackground))
+                                .cornerRadius(8)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 4)
+
+                                LazyVStack(alignment: .leading, spacing: 8) {
                                 ForEach(logs) { entry in
                                     VStack(alignment: .leading, spacing: 3) {
                                         HStack(spacing: 6) {
