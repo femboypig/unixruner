@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 public final class QEMULoader {
-    public typealias QemuInit = @convention(c) (Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?) -> Void
+    public typealias QemuInit = @convention(c) (Int32, UnsafePointer<UnsafePointer<CChar>?>?, UnsafePointer<UnsafePointer<CChar>?>?) -> Int32
     public typealias QemuMainLoop = @convention(c) () -> Void
     public typealias QemuCleanup = @convention(c) () -> Void
 

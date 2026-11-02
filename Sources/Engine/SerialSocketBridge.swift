@@ -5,7 +5,17 @@ public final class SerialSocketBridge {
     private var socketFD: Int32 = -1
     private var readSource: DispatchSourceRead?
     private let queue = DispatchQueue(label: "org.unixruner.socketbridge", qos: .userInteractive)
-    public var onDataReceived: ((Data) -> Void)?
+    private var earlyBuffer = Data()
+    private static let maxBufferSize = 512 * 1024
+
+    public var onDataReceived: ((Data) -> Void)? {
+        didSet {
+            guard let handler = onDataReceived, !earlyBuffer.isEmpty else { return }
+            let pending = earlyBuffer
+            earlyBuffer.removeAll()
+            handler(pending)
+        }
+    }
     public var onConnected: (() -> Void)?
     public var onDisconnected: (() -> Void)?
 
@@ -16,6 +26,10 @@ public final class SerialSocketBridge {
     }
 
     public func connect(port: Int, maxAttempts: Int = 30, retryInterval: TimeInterval = 0.2) {
+        DispatchQueue.main.async {
+            self.earlyBuffer.removeAll()
+        }
+
         queue.async { [weak self] in
             guard let self = self else { return }
 
@@ -65,7 +79,19 @@ public final class SerialSocketBridge {
             if bytesRead > 0 {
                 let data = Data(buffer.prefix(bytesRead))
                 DispatchQueue.main.async {
-                    self.onDataReceived?(data)
+                    if let handler = self.onDataReceived {
+                        if !self.earlyBuffer.isEmpty {
+                            let pending = self.earlyBuffer
+                            self.earlyBuffer.removeAll()
+                            handler(pending)
+                        }
+                        handler(data)
+                    } else {
+                        self.earlyBuffer.append(data)
+                        if self.earlyBuffer.count > Self.maxBufferSize {
+                            self.earlyBuffer.removeFirst(self.earlyBuffer.count - Self.maxBufferSize)
+                        }
+                    }
                 }
             } else if bytesRead == 0 {
                 self.disconnect()
@@ -106,6 +132,7 @@ public final class SerialSocketBridge {
                 self.socketFD = -1
             }
             DispatchQueue.main.async {
+                self.earlyBuffer.removeAll()
                 self.onDisconnected?()
             }
         }

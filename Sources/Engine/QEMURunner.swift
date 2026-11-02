@@ -66,18 +66,60 @@ public final class QEMURunner {
             var envp: [UnsafePointer<CChar>?] = envpList.map { UnsafePointer($0) }
             envp.append(nil)
 
+            var stderrRestored = false
+            func restoreStderr() {
+                guard !stderrRestored else { return }
+                stderrRestored = true
+                if hasPipe {
+                    dup2(savedStderr, STDERR_FILENO)
+                    close(savedStderr)
+                    readSource?.cancel()
+                    close(pipeFDs[0])
+                }
+            }
+
+            var cleanedUp = false
+            func cleanupAllocations() {
+                guard !cleanedUp else { return }
+                cleanedUp = true
+                for ptr in cArgs { free(ptr) }
+                for ptr in envpList { free(ptr) }
+            }
+
+            var exitNotified = false
+            func notifyExit() {
+                guard !exitNotified else { return }
+                exitNotified = true
+                self?.isExecuting = false
+                self?.loader.unload()
+                DispatchQueue.main.async {
+                    onExit()
+                }
+            }
+
             let currentThread = pthread_self()
             _ = atexit_b {
                 if pthread_equal(pthread_self(), currentThread) != 0 {
                     Logger.shared.log("QEMU requested process exit; terminating worker thread safely.", level: .warn)
+                    restoreStderr()
+                    cleanupAllocations()
+                    notifyExit()
                     pthread_exit(nil)
                 }
             }
 
-            argv.withUnsafeBufferPointer { argvBuf in
+            let initStatus = argv.withUnsafeBufferPointer { argvBuf in
                 envp.withUnsafeBufferPointer { envpBuf in
                     qemuInit(Int32(arguments.count), argvBuf.baseAddress, envpBuf.baseAddress)
                 }
+            }
+
+            if initStatus != 0 {
+                Logger.shared.log("QEMU initialization failed with status \(initStatus)", level: .error)
+                restoreStderr()
+                cleanupAllocations()
+                notifyExit()
+                return
             }
 
             Logger.shared.log("QEMU initialized; entering main loop.", level: .engine)
@@ -85,22 +127,9 @@ public final class QEMURunner {
             Logger.shared.log("QEMU main loop finished; cleaning up.", level: .engine)
             qemuCleanup()
 
-            for ptr in cArgs { free(ptr) }
-            for ptr in envpList { free(ptr) }
-
-            if hasPipe {
-                dup2(savedStderr, STDERR_FILENO)
-                close(savedStderr)
-                readSource?.cancel()
-                close(pipeFDs[0])
-            }
-
-            self?.isExecuting = false
-            self?.loader.unload()
-
-            DispatchQueue.main.async {
-                onExit()
-            }
+            cleanupAllocations()
+            restoreStderr()
+            notifyExit()
         }
 
         self.workerThread = thread
