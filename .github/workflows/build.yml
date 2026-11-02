@@ -134,33 +134,29 @@ jobs:
           echo "Injecting /init script..."
           cat << 'EOF' > "${BUILD_DIR}/rootfs/init"
           #!/bin/sh
-          export PATH=/usr/bin:/bin:/usr/sbin:/sbin
-          export PS1='alpine:\w\$ '
           mount -t proc proc /proc
           mount -t sysfs sys /sys
           mount -t devtmpfs dev /dev 2>/dev/null || mount -t tmpfs dev /dev
           mkdir -p /dev/pts
           mount -t devpts devpts /dev/pts
 
-          for tty in /dev/ttyAMA0 /dev/console; do
-              if [ -c "$tty" ]; then
-                  echo "" > "$tty"
-                  echo "=========================================" > "$tty"
-                  echo " Welcome to Alpine Linux ARM64!          " > "$tty"
-                  echo "=========================================" > "$tty"
-                  echo "" > "$tty"
-              fi
-          done
-
           while true; do
-              if [ -c /dev/ttyAMA0 ]; then
-                  exec /bin/sh -i </dev/ttyAMA0 >/dev/ttyAMA0 2>&1
-              else
-                  exec /bin/sh -i </dev/console >/dev/console 2>&1
-              fi
+              exec setsid cttyhack /bin/sh
           done
           EOF
           chmod 0755 "${BUILD_DIR}/rootfs/init"
+
+          cat << 'EOF' > "${BUILD_DIR}/rootfs/bin/cttyhack"
+          #!/bin/sh
+          for dev in /dev/ttyAMA0 /dev/console; do
+              if [ -c "$dev" ]; then
+                  exec <"$dev" >"$dev" 2>&1
+                  break
+              fi
+          done
+          exec "$@"
+          EOF
+          chmod 0755 "${BUILD_DIR}/rootfs/bin/cttyhack"
 
           echo "Archiving rootfs into initramfs.cpio.gz..."
           (cd "${BUILD_DIR}/rootfs" && find . | cpio -o -H newc 2>/dev/null | gzip -9 > "${BUILD_DIR}/initramfs.cpio.gz")
