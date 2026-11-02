@@ -21,7 +21,7 @@ final class QEMUArgumentsTests: XCTestCase {
         XCTAssertTrue(args.contains("-M"))
         XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "virt")
         XCTAssertTrue(args.contains("-accel"))
-        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg,split-wx=on")
         XCTAssertTrue(args.contains("-cpu"))
         XCTAssertEqual(args[args.firstIndex(of: "-cpu")! + 1], "cortex-a57")
         XCTAssertTrue(args.contains("-m"))
@@ -64,7 +64,7 @@ final class QEMUArgumentsTests: XCTestCase {
         XCTAssertTrue(args.contains("-M"))
         XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "pc")
         XCTAssertTrue(args.contains("-accel"))
-        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg,split-wx=on")
         XCTAssertTrue(args.contains("-cpu"))
         XCTAssertEqual(args[args.firstIndex(of: "-cpu")! + 1], "qemu64")
         XCTAssertTrue(args.contains("-m"))
@@ -81,7 +81,7 @@ final class QEMUArgumentsTests: XCTestCase {
 
         XCTAssertEqual(args.first, "qemu-system-aarch64")
         XCTAssertEqual(args[args.firstIndex(of: "-M")! + 1], "virt")
-        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg")
+        XCTAssertEqual(args[args.firstIndex(of: "-accel")! + 1], "tcg,split-wx=on")
         XCTAssertFalse(args.contains("-netdev"))
         XCTAssertFalse(args.contains("virtio-net-pci,netdev=net0"))
         XCTAssertFalse(args.contains("-drive"))
@@ -92,14 +92,14 @@ final class QEMUArgumentsTests: XCTestCase {
         let armConfig = VMConfig.defaultAlpine(kernelPath: "k", initrdPath: "i")
         let armArgs = QEMUArguments.build(for: armConfig)
         if let idx = armArgs.firstIndex(of: "-accel") {
-            XCTAssertEqual(armArgs[idx + 1], "tcg")
+            XCTAssertEqual(armArgs[idx + 1], "tcg,split-wx=on")
             XCTAssertFalse(armArgs[idx + 1].contains("tb-size"))
         }
 
         let x86Config = VMConfig(name: "x86", architecture: .x86_64, memoryMB: 1024, cpuCount: 1)
         let x86Args = QEMUArguments.build(for: x86Config)
         if let idx = x86Args.firstIndex(of: "-accel") {
-            XCTAssertEqual(x86Args[idx + 1], "tcg")
+            XCTAssertEqual(x86Args[idx + 1], "tcg,split-wx=on")
             XCTAssertFalse(x86Args[idx + 1].contains("tb-size"))
         }
     }

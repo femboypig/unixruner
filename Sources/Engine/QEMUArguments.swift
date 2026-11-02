@@ -17,7 +17,7 @@ public struct QEMUArguments {
         case .arm64:
             args += [
                 "-M", "virt",
-                "-accel", "tcg",
+                "-accel", "tcg,split-wx=on",
                 "-cpu", "cortex-a57",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"
@@ -25,7 +25,7 @@ public struct QEMUArguments {
         case .x86_64:
             args += [
                 "-M", "pc",
-                "-accel", "tcg",
+                "-accel", "tcg,split-wx=on",
                 "-cpu", "qemu64",
                 "-m", "\(config.memoryMB)M",
                 "-smp", "\(config.cpuCount)"

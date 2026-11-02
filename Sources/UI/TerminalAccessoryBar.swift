@@ -7,37 +7,50 @@ public struct TerminalAccessoryBar: View {
         self.onKeyPress = onKeyPress
     }
 
-    private let keys: [(label: String, seq: String)] = [
-        ("ESC", "\u{1B}"),
-        ("TAB", "\t"),
-        ("CTRL+C", "\u{03}"),
-        ("CTRL+D", "\u{04}"),
-        ("▲", "\u{1B}[A"),
-        ("▼", "\u{1B}[B"),
-        ("◀", "\u{1B}[D"),
-        ("▶", "\u{1B}[C")
+    private struct KeyItem: Identifiable {
+        let id: String
+        let label: String
+        let seq: String
+        let systemImage: String?
+    }
+
+    private let keys: [KeyItem] = [
+        KeyItem(id: "esc", label: "ESC", seq: "\u{1B}", systemImage: nil),
+        KeyItem(id: "tab", label: "TAB", seq: "\t", systemImage: nil),
+        KeyItem(id: "ctrlc", label: "Ctrl+C", seq: "\u{03}", systemImage: nil),
+        KeyItem(id: "ctrld", label: "Ctrl+D", seq: "\u{04}", systemImage: nil),
+        KeyItem(id: "up", label: "", seq: "\u{1B}[A", systemImage: "arrow.up"),
+        KeyItem(id: "down", label: "", seq: "\u{1B}[B", systemImage: "arrow.down"),
+        KeyItem(id: "left", label: "", seq: "\u{1B}[D", systemImage: "arrow.left"),
+        KeyItem(id: "right", label: "", seq: "\u{1B}[C", systemImage: "arrow.right")
     ]
 
     public var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(keys, id: \.label) { key in
+            HStack(spacing: 6) {
+                ForEach(keys) { key in
                     Button(action: {
                         onKeyPress(key.seq)
                     }) {
-                        Text(key.label)
-                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.12))
-                            .cornerRadius(6)
+                        Group {
+                            if let icon = key.systemImage {
+                                Image(systemName: icon)
+                                    .font(.system(size: 13, weight: .semibold))
+                            } else {
+                                Text(key.label)
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                        }
+                        .foregroundColor(.primary)
+                        .frame(minWidth: 42, minHeight: 34)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(6)
                     }
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .padding(.vertical, 6)
         }
-        .background(Color.black.opacity(0.85))
+        .background(Color(UIColor.secondarySystemBackground))
     }
 }

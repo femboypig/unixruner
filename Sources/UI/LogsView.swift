@@ -13,57 +13,57 @@ public struct LogsView: View {
     private func levelColor(_ level: Logger.Level) -> Color {
         switch level {
         case .info:
-            return .gray
+            return .secondary
         case .warn:
-            return .yellow
+            return .orange
         case .error:
             return .red
         case .engine:
-            return Theme.accent
+            return .blue
         }
     }
 
     public var body: some View {
         NavigationView {
-            ZStack {
-                Theme.terminalBackground.ignoresSafeArea()
-
+            Group {
                 if logs.isEmpty {
                     Text("No logs recorded")
-                        .font(Theme.monoCaption)
-                        .foregroundColor(.gray)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 } else {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 6) {
+                            LazyVStack(alignment: .leading, spacing: 8) {
                                 ForEach(logs) { entry in
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: 3) {
                                         HStack(spacing: 6) {
                                             Text(entry.level.rawValue)
-                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                .padding(.horizontal, 4)
-                                                .padding(.vertical, 1)
-                                                .background(levelColor(entry.level).opacity(0.2))
+                                                .font(.caption2)
+                                                .fontWeight(.bold)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(levelColor(entry.level).opacity(0.15))
                                                 .foregroundColor(levelColor(entry.level))
-                                                .cornerRadius(3)
+                                                .cornerRadius(4)
 
                                             Spacer()
 
                                             Text(entry.timestamp, style: .time)
-                                                .font(.system(size: 10, design: .monospaced))
-                                                .foregroundColor(.gray)
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
                                         }
 
                                         Text(entry.message)
                                             .font(.system(size: 11, design: .monospaced))
-                                            .foregroundColor(Theme.terminalForeground)
+                                            .foregroundColor(.primary)
                                             .textSelection(.enabled)
                                     }
                                     .id(entry.id)
-                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 4)
                                 }
                             }
-                            .padding(12)
+                            .padding(.vertical, 8)
                         }
                         .onAppear {
                             if let last = logs.last {
@@ -73,37 +73,35 @@ public struct LogsView: View {
                     }
                 }
             }
-            .navigationTitle("Logs")
+            .navigationTitle("Diagnostic Logs")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Clear") {
+                    Button(role: .destructive) {
                         Logger.shared.clear()
                         logs = []
+                    } label: {
+                        Text("Clear")
                     }
-                    .font(Theme.monoCaption)
-                    .foregroundColor(.red)
                 }
 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            let text = logs.map { "[\($0.level.rawValue)] \($0.message)" }.joined(separator: "\n")
-                            UIPasteboard.general.string = text
-                            copied = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                copied = false
-                            }
-                        }) {
-                            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                                .foregroundColor(Theme.accent)
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        let text = logs.map { "[\($0.level.rawValue)] \($0.message)" }.joined(separator: "\n")
+                        UIPasteboard.general.string = text
+                        copied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            copied = false
                         }
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    }
 
-                        Button("Close") {
-                            presentationMode.wrappedValue.dismiss()
-                        }
-                        .font(Theme.monoCaption)
-                        .foregroundColor(Theme.accent)
+                    Button {
+                        presentationMode.wrappedValue.dismiss()
+                    } label: {
+                        Text("Done")
+                            .fontWeight(.semibold)
                     }
                 }
             }
