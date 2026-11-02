@@ -96,12 +96,80 @@ jobs:
         run: |
           APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/unixruner.app"
           mkdir -p "${APP_PATH}/alpine"
-          echo "Embedding Alpine Linux ARM64 kernel and initramfs..."
-          curl -L -s -o "${APP_PATH}/alpine/vmlinuz-virt" \
-            https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/netboot/vmlinuz-virt
-          curl -L -s -o "${APP_PATH}/alpine/initramfs-virt" \
-            https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/netboot/initramfs-virt
+          BUILD_DIR="/tmp/alpine_build"
+          rm -rf "${BUILD_DIR}"
+          mkdir -p "${BUILD_DIR}/rootfs"
 
+          echo "Downloading Alpine Linux ARM64 kernel (vmlinuz-virt)..."
+          curl -L -f -s -o "${BUILD_DIR}/vmlinuz-virt" \
+            https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/netboot/vmlinuz-virt
+
+          echo "Extracting raw uncompressed ARM64 Image from EFI zboot wrapper..."
+          python3 - "${BUILD_DIR}/vmlinuz-virt" "${APP_PATH}/alpine/Image" << 'PYEOF'
+          import sys, struct, gzip
+
+          vmlinuz = sys.argv[1]
+          image_out = sys.argv[2]
+          with open(vmlinuz, 'rb') as f:
+              hdr = f.read(16)
+              magic, zimg, offset, comp_size = struct.unpack('<4s4sII', hdr)
+              payload_offset = offset if zimg == b'zimg' else 51568
+              f.seek(payload_offset)
+              comp_data = f.read(comp_size if zimg == b'zimg' else -1)
+
+          image = gzip.decompress(comp_data)
+          assert image[56:60] == b'ARMd', f'Invalid ARM64 kernel magic: {image[56:60]}'
+          with open(image_out, 'wb') as f:
+              f.write(image)
+          print(f'Successfully extracted raw ARM64 Image ({len(image)} bytes) with verified ARMd magic.')
+          PYEOF
+
+          echo "Downloading Alpine minirootfs..."
+          curl -L -f -s -o "${BUILD_DIR}/minirootfs.tar.gz" \
+            https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/alpine-minirootfs-3.20.0-aarch64.tar.gz
+
+          echo "Extracting minirootfs..."
+          tar -xzf "${BUILD_DIR}/minirootfs.tar.gz" -C "${BUILD_DIR}/rootfs"
+
+          echo "Injecting /init script..."
+          cat << 'EOF' > "${BUILD_DIR}/rootfs/init"
+          #!/bin/sh
+          mount -t proc proc /proc
+          mount -t sysfs sys /sys
+          mount -t devtmpfs dev /dev 2>/dev/null || mount -t tmpfs dev /dev
+          mkdir -p /dev/pts
+          mount -t devpts devpts /dev/pts
+
+          while true; do
+              exec setsid cttyhack /bin/sh
+          done
+          EOF
+          chmod 0755 "${BUILD_DIR}/rootfs/init"
+
+          cat << 'EOF' > "${BUILD_DIR}/rootfs/bin/cttyhack"
+          #!/bin/sh
+          for dev in /dev/ttyAMA0 /dev/console; do
+              if [ -c "$dev" ]; then
+                  exec <"$dev" >"$dev" 2>&1
+                  break
+              fi
+          done
+          exec "$@"
+          EOF
+          chmod 0755 "${BUILD_DIR}/rootfs/bin/cttyhack"
+
+          echo "Archiving rootfs into initramfs.cpio.gz..."
+          (cd "${BUILD_DIR}/rootfs" && find . | cpio -o -H newc 2>/dev/null | gzip -9 > "${APP_PATH}/alpine/initramfs.cpio.gz")
+
+          python3 - "${APP_PATH}/alpine/initramfs.cpio.gz" << 'PYEOF'
+          import sys, gzip
+          with gzip.open(sys.argv[1], 'rb') as f:
+              magic = f.read(6)
+              assert magic == b'070701', f'Invalid CPIO magic: {magic}'
+          print('initramfs.cpio.gz verified successfully.')
+          PYEOF
+
+          rm -rf "${BUILD_DIR}"
           echo "Alpine payload size: $(ls -lh "${APP_PATH}/alpine")"
 
       - name: package unsigned ipa
@@ -136,5 +204,5 @@ jobs:
           git push origin :v0.1.0-nightly || true
           gh release create v0.1.0-nightly build/unixruner-unsigned.ipa \
             --title "unixruner v0.1.0-nightly" \
-            --notes "Automated build for iOS 15.0+. Includes embedded Alpine Linux direct boot payload (vmlinuz-virt + initramfs-virt), QEMU ARM64/x86_64 engines, and SwiftTerm socket bridge." \
+            --notes "Automated build for iOS 15.0+. Includes embedded Alpine Linux direct boot payload (Image + initramfs.cpio.gz), QEMU ARM64/x86_64 engines, and SwiftTerm socket bridge." \
             --prerelease
