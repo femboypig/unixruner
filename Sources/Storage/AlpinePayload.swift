@@ -3,8 +3,8 @@ import Foundation
 public final class AlpinePayload {
     public static let shared = AlpinePayload()
 
-    public static let defaultKernelName = "vmlinuz-virt"
-    public static let defaultInitrdName = "initramfs-virt"
+    public static let defaultKernelName = "Image"
+    public static let defaultInitrdName = "initramfs.cpio.gz"
 
     private let fileManager = FileManager.default
 
@@ -57,9 +57,6 @@ public final class AlpinePayload {
     }
 
     public func resolvedKernelPath() -> String? {
-        if fileManager.fileExists(atPath: localKernelURL.path) {
-            return localKernelURL.path
-        }
         if let bundled = bundledKernelURL, fileManager.fileExists(atPath: bundled.path) {
             return bundled.path
         }
@@ -67,9 +64,6 @@ public final class AlpinePayload {
     }
 
     public func resolvedInitrdPath() -> String? {
-        if fileManager.fileExists(atPath: localInitrdURL.path) {
-            return localInitrdURL.path
-        }
         if let bundled = bundledInitrdURL, fileManager.fileExists(atPath: bundled.path) {
             return bundled.path
         }
@@ -77,12 +71,6 @@ public final class AlpinePayload {
     }
 
     public func preparePayload() throws {
-        // If bundled into app, copy or link to local directory for quick access
-        if !fileManager.fileExists(atPath: localKernelURL.path), let bundled = bundledKernelURL {
-            try fileManager.copyItem(at: bundled, to: localKernelURL)
-        }
-        if !fileManager.fileExists(atPath: localInitrdURL.path), let bundled = bundledInitrdURL {
-            try fileManager.copyItem(at: bundled, to: localInitrdURL)
-        }
+        // Direct bundle boot: bypass Application Support caching to prevent stale cache lockouts
     }
 }
