@@ -23,7 +23,7 @@ public struct ConsoleView: UIViewRepresentable {
             terminal.feed(byteArray: [UInt8](data)[...])
         }
 
-        terminal.becomeFirstResponder()
+        _ = terminal.becomeFirstResponder()
         return terminal
     }
 

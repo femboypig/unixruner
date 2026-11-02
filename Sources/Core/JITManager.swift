@@ -23,7 +23,7 @@ public enum JITManager {
         }
 
         // 2. Fallback: Test allocate an executable page via vm_protect
-        let size = vm_size_t(PAGE_SIZE)
+        let size = vm_page_size > 0 ? vm_page_size : vm_size_t(16384)
         var addr: vm_address_t = 0
         let allocRes = vm_allocate(mach_task_self_, &addr, size, VM_FLAGS_ANYWHERE)
         guard allocRes == KERN_SUCCESS else { return false }
